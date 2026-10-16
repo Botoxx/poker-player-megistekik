@@ -83,7 +83,8 @@ class ProfileTest(unittest.TestCase):
         gs = self.play("g", 1, 20)
         player.Player().showdown(gs)
         player.Player().showdown(gs)  # repeated showdown must not double count
-        self.assertEqual(player.PROFILES["other|v1"], {"hands": 2, "raises": 1, "shoves": 0})
+        prof = player.PROFILES["other|v1"]
+        self.assertEqual((prof["hands"], prof["raises"], prof["shoves"]), (2, 1, 0))
 
     def test_profile_survives_a_new_game(self):
         for rnd in range(3):
@@ -94,6 +95,24 @@ class ProfileTest(unittest.TestCase):
         gs.update(game_id="g3")
         gs["players"][0]["version"] = "v1"
         self.assertEqual(player.stats_for(gs, gs["players"][0])["raises"], 2)
+
+    def test_new_version_replaces_old_one(self):
+        player.PROFILES["other|v0"] = {"hands": 500, "raises": 400, "shoves": 0}  # saved before "seen"
+        player.PROFILES["extra0|old"] = {"hands": 50, "raises": 0, "shoves": 0, "seen": 1.0}
+        self.play("g", 0, 100)
+        self.play("g", 1, 20)
+        self.assertNotIn("other|v0", player.PROFILES)
+        self.assertIn("other|v1", player.PROFILES)
+        self.assertNotIn("extra0|old", player.PROFILES)  # extra0 now plays as version ""
+        self.assertIn("extra0|", player.PROFILES)
+
+    def test_unseen_legacy_profiles_are_kept(self):
+        profiles = {"a|1": {"hands": 5}, "a|2": {"hands": 7}, "b|1": {"hands": 1, "seen": 5.0}}
+        self.assertEqual(set(player.prune_old_versions(profiles)), {"a|1", "a|2", "b|1"})
+
+    def test_most_recently_seen_version_wins(self):
+        profiles = {"a|1": {"seen": 9.0}, "a|2": {"seen": 3.0}, "a|0": {"hands": 1}}
+        self.assertEqual(set(player.prune_old_versions(profiles)), {"a|1"})
 
 
 if __name__ == "__main__":

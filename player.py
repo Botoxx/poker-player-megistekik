@@ -1,4 +1,5 @@
 import sys
+import time
 import traceback
 from collections import Counter
 
@@ -118,7 +119,22 @@ OUR_NAME = [None]  # learned from bet requests; the showdown request has no in_a
 MIN_HANDS = 8
 
 # Saved across games and restarts: "name|version" -> counts. A new opponent version starts fresh.
-PROFILES = storage.load()
+def prune_old_versions(profiles):
+    """Keep only each opponent's most recently seen version: an old version no longer predicts how it plays.
+
+    Profiles saved before "seen" existed are kept until a version of that opponent is seen again.
+    """
+    newest = {}
+    for key, prof in profiles.items():
+        name = key.split("|", 1)[0]
+        if "seen" in prof and prof["seen"] > profiles.get(newest.get(name), {}).get("seen", -1):
+            newest[name] = key
+    for key in [k for k in profiles if k.split("|", 1)[0] in newest and newest[k.split("|", 1)[0]] != k]:
+        del profiles[key]
+    return profiles
+
+
+PROFILES = prune_old_versions(storage.load())
 ROUNDS = {}  # game_id -> {"last": round seen in bet requests, "done": rounds already added to PROFILES}
 
 
@@ -143,6 +159,8 @@ def commit_round(game_state, rnd):
         prof = PROFILES.setdefault(profile_key(p), {})
         for k in ("hands", "raises", "shoves"):
             prof[k] = prof.get(k, 0) + (1 if rnd in s[k] else 0)
+        prof["seen"] = time.time()
+    prune_old_versions(PROFILES)
     storage.save_soon(PROFILES)
 
 
@@ -296,7 +314,7 @@ def light_3bet_range(hole):
 
 
 class Player:
-    VERSION = "ultragood_python_playerv0.24.0"
+    VERSION = "ultragood_python_playerv0.25.0"
 
     def betRequest(self, game_state):
         try:
