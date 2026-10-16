@@ -45,8 +45,11 @@ class BetRequestTest(unittest.TestCase):
     def test_trash_preflop_folds(self):
         self.assertEqual(Player().betRequest(state(["7h", "2d"])), 0)
 
-    def test_playable_preflop_calls(self):
-        self.assertEqual(Player().betRequest(state(["Jh", "10d"])), 10)
+    def test_playable_preflop_opens_with_raise(self):
+        self.assertEqual(Player().betRequest(state(["Jh", "10d"])), 60)
+
+    def test_playable_preflop_calls_small_raise(self):
+        self.assertEqual(Player().betRequest(state(["Jh", "10d"], current_buy_in=60)), 50)
 
     def test_two_pair_postflop_raises(self):
         bet = Player().betRequest(state(["Ah", "9d"], board=["As", "9c", "2h"]))
