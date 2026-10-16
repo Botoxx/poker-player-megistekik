@@ -178,6 +178,15 @@ class BetRequestTest(unittest.TestCase):
         gs["players"][0]["bet"] = 150
         self.assertGreater(Player().betRequest(gs), 0)
 
+    def test_calls_nontekik_headsup_bluff_lighter(self):
+        # nontekik v1.2.0 fires 0.6 pot at <=0.35 equity heads-up vs us (we are a big-bet folder).
+        # Second pair should call that medium bet, where the old "nontekik is honest" read folded.
+        gs = state(["7h", "6h"], board=["Kc", "7d", "2s"], current_buy_in=120, my_bet=0,
+                   stack=2000, pot=200, others=1)
+        gs["players"][0]["name"] = "nontekik"
+        gs["players"][0]["bet"] = 120
+        self.assertGreater(Player().betRequest(gs), 0)
+
     def test_second_pair_folds_to_big_bet(self):
         # Round 34 knockout: K-10 on K-6-A-9 facing 420 into 700 with 790 behind.
         gs = state(["Ks", "10s"], board=["Kh", "6s", "Ad", "9s"], current_buy_in=620, my_bet=200,
