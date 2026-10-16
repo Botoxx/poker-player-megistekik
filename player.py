@@ -2,6 +2,7 @@ import sys
 import traceback
 from collections import Counter
 
+import storage
 from equity import equity, evaluate7, to_tuple
 
 RANKS = {str(n): n for n in range(2, 11)}
@@ -116,6 +117,45 @@ MAX_GAMES = 50
 OUR_NAME = [None]  # learned from bet requests; the showdown request has no in_action
 MIN_HANDS = 8
 
+# Saved across games and restarts: "name|version" -> counts. A new opponent version starts fresh.
+PROFILES = storage.load()
+ROUNDS = {}  # game_id -> {"last": round seen in bet requests, "done": rounds already added to PROFILES}
+
+
+def profile_key(p):
+    return "%s|%s" % (p["name"], p.get("version", ""))
+
+
+def commit_round(game_state, rnd):
+    """Add one finished hand of this game's per-hand flags to the saved profiles, once."""
+    gid = game_state.get("game_id", "?")
+    rounds = ROUNDS.setdefault(gid, {"last": None, "done": set()})
+    while len(ROUNDS) > MAX_GAMES:
+        ROUNDS.pop(next(iter(ROUNDS)))
+    if rnd is None or rnd in rounds["done"]:
+        return
+    rounds["done"].add(rnd)
+    game = OPPONENTS.get(gid, {})
+    for p in game_state["players"]:
+        s = game.get(p["name"])
+        if p["name"] == OUR_NAME[0] or not s or rnd not in s["hands"]:
+            continue
+        prof = PROFILES.setdefault(profile_key(p), {})
+        for k in ("hands", "raises", "shoves"):
+            prof[k] = prof.get(k, 0) + (1 if rnd in s[k] else 0)
+    storage.save_soon(PROFILES)
+
+
+def stats_for(game_state, p):
+    """Counts for an opponent: the saved profile once it has seen more hands than this game, else this game's."""
+    s = OPPONENTS.get(game_state.get("game_id", "?"), {}).get(p["name"])
+    local = {}
+    if s:
+        local = {k: len(s.get(k, ())) for k in ("hands", "raises", "shoves")}
+        local.update(big_showdowns=s.get("big_showdowns", 0), weak_showdowns=s.get("weak_showdowns", 0))
+    saved = PROFILES.get(profile_key(p), {})
+    return saved if saved.get("hands", 0) >= local.get("hands", 0) and saved else local
+
 
 def observe(game_state):
     game = OPPONENTS.setdefault(game_state.get("game_id", "?"), {})
@@ -124,6 +164,11 @@ def observe(game_state):
     rnd = game_state.get("round")
     big_blind = 2 * game_state.get("small_blind", 1)
     OUR_NAME[0] = game_state["players"][game_state["in_action"]]["name"]
+    # A new round means the last one is over, even if no showdown request arrived for it.
+    last = ROUNDS.get(game_state.get("game_id", "?"), {}).get("last")
+    if last is not None and last != rnd:
+        commit_round(game_state, last)
+    ROUNDS.setdefault(game_state.get("game_id", "?"), {"last": None, "done": set()})["last"] = rnd
     # Largest bet each opponent made this hand on any street; the showdown state has bets reset to 0.
     for i, p in enumerate(game_state["players"]):
         if i != game_state["in_action"] and p.get("status") != "out":
@@ -150,12 +195,12 @@ def raiser_style(game_state):
     me = game_state["in_action"]
     top = max((p for i, p in enumerate(game_state["players"]) if i != me),
               key=lambda p: p.get("bet", 0), default=None)
-    s = OPPONENTS.get(game_state.get("game_id", "?"), {}).get(top["name"]) if top else None
-    if not s or len(s["hands"]) < MIN_HANDS:
+    s = stats_for(game_state, top) if top else {}
+    if s.get("hands", 0) < MIN_HANDS:
         return None
-    if len(s.get("shoves", ())) / len(s["hands"]) >= 0.15:
+    if s.get("shoves", 0) / s["hands"] >= 0.15:
         return "shover"
-    freq = len(s["raises"]) / len(s["hands"])
+    freq = s.get("raises", 0) / s["hands"]
     return "loose" if freq >= 0.35 else "tight" if freq < 0.12 else None
 
 
@@ -172,13 +217,14 @@ def hu_call_shove_range(hole):
 
 def shover_alive(game_state):
     """True if an opponent still in the game shoves preflop in at least 15% of hands we saw."""
-    game = OPPONENTS.get(game_state.get("game_id", "?"), {})
     me = game_state["in_action"]
     for i, p in enumerate(game_state["players"]):
-        s = game.get(p["name"])
-        if i == me or p.get("status") == "out" or not s or len(s["hands"]) < MIN_HANDS:
+        if i == me or p.get("status") == "out":
             continue
-        if len(s.get("shoves", ())) / len(s["hands"]) >= 0.15:
+        s = stats_for(game_state, p)
+        if s.get("hands", 0) < MIN_HANDS:
+            continue
+        if s.get("shoves", 0) / s["hands"] >= 0.15:
             return True
     return False
 
@@ -202,8 +248,9 @@ def record_showdown(game_state):
             continue
         score = evaluate7([to_tuple(c) for c in hole] + board)
         weak = score <= board_score or (score[0] == 1 and score[1] < top_board) or score[0] == 0
-        s["big_showdowns"] = s.get("big_showdowns", 0) + 1
-        s["weak_showdowns"] = s.get("weak_showdowns", 0) + (1 if weak else 0)
+        for counts in (s, PROFILES.setdefault(profile_key(p), {})):
+            counts["big_showdowns"] = counts.get("big_showdowns", 0) + 1
+            counts["weak_showdowns"] = counts.get("weak_showdowns", 0) + (1 if weak else 0)
 
 
 def bettor_profile(game_state):
@@ -211,8 +258,8 @@ def bettor_profile(game_state):
     me = game_state["in_action"]
     top = max((p for i, p in enumerate(game_state["players"]) if i != me),
               key=lambda p: p.get("bet", 0), default=None)
-    s = OPPONENTS.get(game_state.get("game_id", "?"), {}).get(top["name"]) if top else None
-    big, weak = (s.get("big_showdowns", 0), s.get("weak_showdowns", 0)) if s else (0, 0)
+    s = stats_for(game_state, top) if top else {}
+    big, weak = s.get("big_showdowns", 0), s.get("weak_showdowns", 0)
     if big >= 2 and weak / big >= 0.4:
         return "bluffer"
     if big >= 3 and weak == 0:
@@ -447,5 +494,6 @@ class Player:
     def showdown(self, game_state):
         try:
             record_showdown(game_state)
+            commit_round(game_state, game_state.get("round"))
         except Exception:
             traceback.print_exc(file=sys.stderr)

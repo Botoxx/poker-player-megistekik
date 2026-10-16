@@ -36,3 +36,6 @@ nosetests.xml
 .pydevproject
 
 .idea
+# Saved opponent profiles (local fallback store)
+profiles.json
+profiles.json.tmp

@@ -1,4 +1,7 @@
+import os
 import unittest
+
+os.environ["PROFILE_STORE"] = "off"  # tests must not read or write saved profiles
 
 from player import Player, hand_category, preflop_strength, PAIR, TWO_PAIR, STRAIGHT, FLUSH, FULL_HOUSE
 
@@ -39,6 +42,12 @@ class HandCategoryTest(unittest.TestCase):
 
 
 class BetRequestTest(unittest.TestCase):
+    def setUp(self):
+        import player
+        player.OPPONENTS.clear()
+        player.PROFILES.clear()
+        player.ROUNDS.clear()
+
     def test_premium_preflop_raises(self):
         self.assertGreaterEqual(Player().betRequest(state(["Ah", "Ad"])), 10 + 20)
 
@@ -83,6 +92,8 @@ class BetRequestTest(unittest.TestCase):
     def test_calls_wider_against_loose_raiser(self):
         import player
         player.OPPONENTS.clear()
+        player.PROFILES.clear()
+        player.ROUNDS.clear()
         for rnd in range(10):  # "other" raises to 100 every hand
             gs = state(["7h", "2d"], current_buy_in=100)
             gs.update(game_id="g", round=rnd)
@@ -92,7 +103,9 @@ class BetRequestTest(unittest.TestCase):
         gs.update(game_id="g", round=11)
         gs["players"][0]["bet"] = 200
         self.assertEqual(Player().betRequest(gs), 140)
-        gs["game_id"] = "fresh"  # no reads in a new game: fold the same spot
+        gs["game_id"] = "fresh"  # saved profile carries the read into a new game
+        self.assertEqual(Player().betRequest(gs), 140)
+        gs["players"][0]["version"] = "v2"  # a redeployed opponent starts without reads
         self.assertEqual(Player().betRequest(gs), 0)
 
     def test_twelve_big_blinds_folds_queen_jack(self):
@@ -101,6 +114,8 @@ class BetRequestTest(unittest.TestCase):
     def test_calls_frequent_shover_with_pocket_sevens(self):
         import player
         player.OPPONENTS.clear()
+        player.PROFILES.clear()
+        player.ROUNDS.clear()
         for rnd in range(10):  # "other" shoves every hand
             gs = state(["7h", "2d"], current_buy_in=1000)
             gs.update(game_id="s", round=rnd)
@@ -127,6 +142,8 @@ class BetRequestTest(unittest.TestCase):
     def test_no_light_open_when_shover_at_table(self):
         import player
         player.OPPONENTS.clear()
+        player.PROFILES.clear()
+        player.ROUNDS.clear()
         for rnd in range(10):
             gs = state(["7h", "2d"], current_buy_in=1000)
             gs.update(game_id="sh", round=rnd)
@@ -178,12 +195,16 @@ class BetRequestTest(unittest.TestCase):
     def test_calls_big_bet_from_known_bluffer(self):
         import player
         player.OPPONENTS.clear()
+        player.PROFILES.clear()
+        player.ROUNDS.clear()
         self.teach_showdowns("bluff", ["6h", "3c"], 2)  # bet big twice with nothing
         self.assertEqual(Player().betRequest(self.k10_spot("bluff")), 420)
 
     def test_folds_big_bet_from_honest_bettor(self):
         import player
         player.OPPONENTS.clear()
+        player.PROFILES.clear()
+        player.ROUNDS.clear()
         self.teach_showdowns("honest", ["Qd", "Qs"], 3)  # bet big three times with a set
         self.assertEqual(Player().betRequest(self.k10_spot("honest")), 0)
 
