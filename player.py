@@ -1,3 +1,4 @@
+# Strategy is documented in STRATEGY.md, which is authoritative; this file implements it.
 import sys
 import time
 import traceback
