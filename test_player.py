@@ -169,23 +169,15 @@ class BetRequestTest(unittest.TestCase):
         # A normal-sized re-raise (to_call 240 = 12 big blinds) QQ still calls.
         self.assertEqual(Player().betRequest(state(["Qh", "Qd"], current_buy_in=300, my_bet=60, stack=2000)), 240)
 
-    def test_calls_bpex_headsup_stab_lighter(self):
-        # bpex maniac 4.0 stabs 3/4 pot ~60% of hands heads-up after we check (mostly air).
-        # Second pair should call that medium bet, where the old "bpex is honest" read folded.
-        gs = state(["7h", "6h"], board=["Kc", "7d", "2s"], current_buy_in=150, my_bet=0,
-                   stack=2000, pot=200, others=1)
-        gs["players"][0]["name"] = "bpex"
-        gs["players"][0]["bet"] = 150
-        self.assertGreater(Player().betRequest(gs), 0)
-
-    def test_calls_nontekik_headsup_bluff_lighter(self):
-        # nontekik v1.2.0 fires 0.6 pot at <=0.35 equity heads-up vs us (we are a big-bet folder).
-        # Second pair should call that medium bet, where the old "nontekik is honest" read folded.
-        gs = state(["7h", "6h"], board=["Kc", "7d", "2s"], current_buy_in=120, my_bet=0,
-                   stack=2000, pot=200, others=1)
-        gs["players"][0]["name"] = "nontekik"
-        gs["players"][0]["bet"] = 120
-        self.assertGreater(Player().betRequest(gs), 0)
+    def test_second_pair_folds_to_honest_headsup_bets(self):
+        # Calling bpex/nontekik heads-up bets as if they held random hands lost money: bpex
+        # heads-up pots went from +80 to -30 chips per hand over 15 games each. Give them credit.
+        for name, bet in (("bpex", 150), ("nontekik", 120)):
+            gs = state(["7h", "6h"], board=["Kc", "7d", "2s"], current_buy_in=bet, my_bet=0,
+                       stack=2000, pot=200, others=1)
+            gs["players"][0]["name"] = name
+            gs["players"][0]["bet"] = bet
+            self.assertEqual(Player().betRequest(gs), 0, name)
 
     def test_second_pair_folds_to_big_bet(self):
         # Round 34 knockout: K-10 on K-6-A-9 facing 420 into 700 with 790 behind.
