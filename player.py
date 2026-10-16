@@ -1,5 +1,5 @@
 class Player:
-    VERSION = "Default Python folding player"
+    VERSION = "ultragood_python_playerv0.0.1"
 
     def betRequest(self, game_state):
 
