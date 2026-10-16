@@ -136,6 +136,10 @@ class BetRequestTest(unittest.TestCase):
         gs.update(game_id="sh", round=11)
         self.assertEqual(Player().betRequest(gs), 0)
 
+    def test_big_reraise_commits_instead_of_raise_fold(self):
+        # A-Q facing a raise to 160 with 700 behind: 3x would be 480, so shove 700 instead.
+        self.assertEqual(Player().betRequest(state(["Qh", "As"], current_buy_in=160, my_bet=20, stack=700)), 700)
+
     def test_bet_never_exceeds_stack(self):
         self.assertLessEqual(Player().betRequest(state(["Ah", "Ad"], stack=15)), 15)
 

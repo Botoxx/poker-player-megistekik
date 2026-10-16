@@ -174,7 +174,7 @@ def shover_alive(game_state):
 
 
 class Player:
-    VERSION = "ultragood_python_playerv0.14.0"
+    VERSION = "ultragood_python_playerv0.15.0"
 
     def betRequest(self, game_state):
         try:
@@ -249,7 +249,9 @@ class Player:
                     return 0  # opening would just get shoved on and folded
                 return min(max(min_raise, 3 * big_blind), stack)
             if strength == 2 and not already_raised:
-                return min(max(min_raise, 3 * game_state["current_buy_in"]), stack)
+                raise_to = max(min_raise, 3 * game_state["current_buy_in"])
+                # Raising a third of our stack and folding to a shove is the worst result: commit instead.
+                return stack if raise_to >= stack // 3 else raise_to
             # Facing a re-raise: only monsters continue for big amounts; never re-raise again.
             if is_monster(hole):
                 return min(to_call, stack)
