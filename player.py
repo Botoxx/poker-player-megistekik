@@ -2,7 +2,7 @@ import sys
 import traceback
 from collections import Counter
 
-from equity import equity
+from equity import equity, evaluate7, to_tuple
 
 RANKS = {str(n): n for n in range(2, 11)}
 RANKS.update({"T": 10, "J": 11, "Q": 12, "K": 13, "A": 14})
@@ -113,6 +113,7 @@ def heads_up_range(hole):
 # Lives in process memory; a restart resets it and the bot plays without reads.
 OPPONENTS = {}
 MAX_GAMES = 50
+OUR_NAME = [None]  # learned from bet requests; the showdown request has no in_action
 MIN_HANDS = 8
 
 
@@ -120,10 +121,19 @@ def observe(game_state):
     game = OPPONENTS.setdefault(game_state.get("game_id", "?"), {})
     while len(OPPONENTS) > MAX_GAMES:
         OPPONENTS.pop(next(iter(OPPONENTS)))
-    if game_state.get("community_cards"):
-        return
     rnd = game_state.get("round")
     big_blind = 2 * game_state.get("small_blind", 1)
+    OUR_NAME[0] = game_state["players"][game_state["in_action"]]["name"]
+    # Largest bet each opponent made this hand on any street; the showdown state has bets reset to 0.
+    for i, p in enumerate(game_state["players"]):
+        if i != game_state["in_action"] and p.get("status") != "out":
+            s = game.setdefault(p["name"], {"hands": set(), "raises": set(), "shoves": set()})
+            bets = s.setdefault("max_bet", {})
+            bets[rnd] = max(bets.get(rnd, 0), p.get("bet", 0))
+            for old in [r for r in bets if r != rnd and r != rnd - 1]:
+                del bets[old]
+    if game_state.get("community_cards"):
+        return
     for i, p in enumerate(game_state["players"]):
         if i == game_state["in_action"] or p.get("status") == "out":
             continue
@@ -173,8 +183,45 @@ def shover_alive(game_state):
     return False
 
 
+def record_showdown(game_state):
+    """Count opponents who put in 10+ big blinds and showed down less than top pair."""
+    game = OPPONENTS.get(game_state.get("game_id", "?"), {})
+    board = [to_tuple(c) for c in game_state.get("community_cards", [])]
+    if len(board) != 5:
+        return
+    board_score = evaluate7(board)
+    top_board = max(r for r, _ in board)
+    big_blind = 2 * game_state.get("small_blind", 1)
+    rnd = game_state.get("round")
+    for p in game_state["players"]:
+        s = game.get(p["name"])
+        hole = p.get("hole_cards") or []
+        if p["name"] == OUR_NAME[0] or p.get("status") != "active" or len(hole) != 2 or not s:
+            continue
+        if s.get("max_bet", {}).get(rnd, 0) < 10 * big_blind:
+            continue
+        score = evaluate7([to_tuple(c) for c in hole] + board)
+        weak = score <= board_score or (score[0] == 1 and score[1] < top_board) or score[0] == 0
+        s["big_showdowns"] = s.get("big_showdowns", 0) + 1
+        s["weak_showdowns"] = s.get("weak_showdowns", 0) + (1 if weak else 0)
+
+
+def bettor_profile(game_state):
+    """Return "bluffer", "honest" or None for the opponent holding the current highest bet."""
+    me = game_state["in_action"]
+    top = max((p for i, p in enumerate(game_state["players"]) if i != me),
+              key=lambda p: p.get("bet", 0), default=None)
+    s = OPPONENTS.get(game_state.get("game_id", "?"), {}).get(top["name"]) if top else None
+    big, weak = (s.get("big_showdowns", 0), s.get("weak_showdowns", 0)) if s else (0, 0)
+    if big >= 2 and weak / big >= 0.4:
+        return "bluffer"
+    if big >= 3 and weak == 0:
+        return "honest"
+    return None
+
+
 class Player:
-    VERSION = "ultragood_python_playerv0.17.0"
+    VERSION = "ultragood_python_playerv0.18.0"
 
     def betRequest(self, game_state):
         try:
@@ -320,8 +367,13 @@ class Player:
         opponents = max(in_hand - 1, 1)
         pot = game_state.get("pot", 0)
         big_bet = to_call > 0 and to_call >= stack // 4 and to_call >= pot // 2
-        # A bet of a quarter of our stack and half the pot means a made hand, not a random one.
-        win, sims = equity(hole, board, opponents, strong_range=big_bet)
+        try:
+            profile = bettor_profile(game_state) if big_bet else None
+        except Exception:
+            profile = None
+        # A bet of a quarter of our stack and half the pot means a made hand, not a random one,
+        # unless this bettor has shown down weak hands after betting big before.
+        win, sims = equity(hole, board, opponents, strong_range=big_bet and profile != "bluffer")
         if sims < 100:
             return None
         if to_call == 0:
@@ -333,7 +385,8 @@ class Player:
         # A bettor's range beats a random hand: discount up to 10 points as the bet grows toward the pot.
         win -= 0.10 * min(1.0, to_call / max(pot, 1))
         price = to_call / (pot + to_call)
-        if big_bet and win < 0.55:
+        floor = {"bluffer": 0.0, "honest": 0.60}.get(profile, 0.55)
+        if big_bet and win < floor:
             return 0
         if win >= 0.80:
             return min(max(min_raise, pot), stack)
@@ -342,4 +395,7 @@ class Player:
         return 0
 
     def showdown(self, game_state):
-        pass
+        try:
+            record_showdown(game_state)
+        except Exception:
+            traceback.print_exc(file=sys.stderr)

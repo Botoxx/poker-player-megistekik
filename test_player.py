@@ -151,6 +151,40 @@ class BetRequestTest(unittest.TestCase):
                    stack=790, pot=700, others=1)
         self.assertGreaterEqual(Player().betRequest(gs), 420)
 
+    def k10_spot(self, game_id):
+        gs = state(["Ks", "10s"], board=["Kh", "6s", "Ad", "9s"], current_buy_in=620, my_bet=200,
+                   stack=790, pot=700, others=1)
+        gs.update(game_id=game_id, round=50)
+        gs["players"][0]["bet"] = 620
+        return gs
+
+    def teach_showdowns(self, game_id, hole, n):
+        """Opponent bets 300 (15 big blinds) then shows `hole` on a fixed board, n times."""
+        for rnd in range(n):
+            gs = state(["7h", "2d"], board=["Qh", "8c", "4d"], current_buy_in=300, my_bet=0, others=1)
+            gs.update(game_id=game_id, round=rnd)
+            gs["players"][0]["bet"] = 300
+            Player().betRequest(gs)
+            sd = {"game_id": game_id, "round": rnd, "small_blind": 10,
+                  "community_cards": [c(x) for x in ["Qh", "8c", "4d", "2s", "Jc"]],
+                  "players": [{"name": "other", "status": "active", "bet": 0, "stack": 0,
+                               "hole_cards": [c(x) for x in hole]},
+                              {"name": "us", "status": "active", "bet": 0, "stack": 0,
+                               "hole_cards": [c("7h"), c("2d")]}]}
+            Player().showdown(sd)
+
+    def test_calls_big_bet_from_known_bluffer(self):
+        import player
+        player.OPPONENTS.clear()
+        self.teach_showdowns("bluff", ["6h", "3c"], 2)  # bet big twice with nothing
+        self.assertEqual(Player().betRequest(self.k10_spot("bluff")), 420)
+
+    def test_folds_big_bet_from_honest_bettor(self):
+        import player
+        player.OPPONENTS.clear()
+        self.teach_showdowns("honest", ["Qd", "Qs"], 3)  # bet big three times with a set
+        self.assertEqual(Player().betRequest(self.k10_spot("honest")), 0)
+
     def test_bet_never_exceeds_stack(self):
         self.assertLessEqual(Player().betRequest(state(["Ah", "Ad"], stack=15)), 15)
 
