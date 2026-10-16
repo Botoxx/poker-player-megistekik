@@ -68,10 +68,17 @@ class BetRequestTest(unittest.TestCase):
     def test_short_stack_folds_trash(self):
         self.assertEqual(Player().betRequest(state(["9h", "3d"], stack=200)), 0)
 
-    def test_board_pair_plus_our_pair_is_not_two_pair(self):
-        # A-Q on A-8-8 facing a big bet: one pair of aces, not two pair, so no big call.
-        gs = state(["Qh", "As"], board=["8s", "Ah", "8h"], current_buy_in=400, my_bet=100, stack=600, pot=600)
+    def test_equity_folds_air_to_pot_bet(self):
+        gs = state(["7c", "2d"], board=["8s", "Ah", "8h"], current_buy_in=700, my_bet=100, stack=600, pot=1300)
         self.assertEqual(Player().betRequest(gs), 0)
+
+    def test_equity_raises_full_house(self):
+        gs = state(["8c", "8d"], board=["8s", "Ah", "Ad"], current_buy_in=200, my_bet=100, stack=900, pot=500)
+        self.assertGreater(Player().betRequest(gs), 100)
+
+    def test_equity_calls_nut_flush_draw_at_good_price(self):
+        gs = state(["Ah", "7h"], board=["2h", "9h", "Kc"], current_buy_in=120, my_bet=100, stack=900, pot=400, others=1)
+        self.assertEqual(Player().betRequest(gs), 20)
 
     def test_calls_wider_against_loose_raiser(self):
         import player

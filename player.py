@@ -2,6 +2,8 @@ import sys
 import traceback
 from collections import Counter
 
+from equity import equity
+
 RANKS = {str(n): n for n in range(2, 11)}
 RANKS.update({"T": 10, "J": 11, "Q": 12, "K": 13, "A": 14})
 
@@ -172,7 +174,7 @@ def shover_alive(game_state):
 
 
 class Player:
-    VERSION = "ultragood_python_playerv0.13.0"
+    VERSION = "ultragood_python_playerv0.14.0"
 
     def betRequest(self, game_state):
         try:
@@ -262,6 +264,14 @@ class Player:
                 return min(to_call, stack)
             return 0
 
+        try:
+            decision = self.postflop_by_equity(game_state, me, hole, board, stack, to_call, min_raise)
+        except Exception:
+            traceback.print_exc(file=sys.stderr)
+            decision = None
+        if decision is not None:
+            return decision
+
         category = hand_category(hole + board)
         board_category = hand_category(board) if len(board) >= 2 else HIGH_CARD
         pot = game_state.get("pot", 0)
@@ -300,6 +310,29 @@ class Player:
             max_call = pot // 3 if len(board) == 3 else pot // 5
             if to_call <= min(max_call, stack // 10):
                 return to_call
+        return 0
+
+    def postflop_by_equity(self, game_state, me, hole, board, stack, to_call, min_raise):
+        """Bet by Monte Carlo win chance against the opponents still in the hand; None to fall back to rules."""
+        in_hand = sum(1 for p in game_state["players"] if p.get("status") == "active")
+        opponents = max(in_hand - 1, 1)
+        win, sims = equity(hole, board, opponents)
+        if sims < 100:
+            return None
+        pot = game_state.get("pot", 0)
+        if to_call == 0:
+            if win >= 0.65:
+                return min(max(min_raise, 2 * pot // 3), stack)
+            if win >= 0.5 and opponents == 1:
+                return min(max(min_raise, pot // 2), stack)
+            return 0
+        # A bettor's range beats a random hand: discount up to 10 points as the bet grows toward the pot.
+        win -= 0.10 * min(1.0, to_call / max(pot, 1))
+        price = to_call / (pot + to_call)
+        if win >= 0.80:
+            return min(max(min_raise, pot), stack)
+        if win >= price + 0.03:
+            return min(to_call, stack)
         return 0
 
     def showdown(self, game_state):
