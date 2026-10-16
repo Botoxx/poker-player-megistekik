@@ -62,6 +62,12 @@ class BetRequestTest(unittest.TestCase):
         # We opened to 84, opponent re-raised to 780: jacks must fold, not re-raise.
         self.assertEqual(Player().betRequest(state(["Js", "Jc"], current_buy_in=780, my_bet=84, stack=900)), 0)
 
+    def test_short_stack_shoves_any_ace(self):
+        self.assertEqual(Player().betRequest(state(["Ah", "3d"], stack=200)), 200)
+
+    def test_short_stack_folds_trash(self):
+        self.assertEqual(Player().betRequest(state(["9h", "3d"], stack=200)), 0)
+
     def test_bet_never_exceeds_stack(self):
         self.assertLessEqual(Player().betRequest(state(["Ah", "Ad"], stack=15)), 15)
 

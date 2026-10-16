@@ -63,8 +63,24 @@ def is_monster(hole):
     return (a == b and a >= 12) or (a == 14 and b == 13)
 
 
+def shove_range(hole):
+    a, b = sorted((rank_of(c) for c in hole), reverse=True)
+    suited = hole[0]["suit"] == hole[1]["suit"]
+    return a == b or a == 14 or (a == 13 and b >= 10) or (a == 12 and b == 11) or (suited and b >= 10)
+
+
+def call_shove_range(hole):
+    a, b = sorted((rank_of(c) for c in hole), reverse=True)
+    return (a == b and a >= 9) or (a == 14 and b >= 12)
+
+
+def heads_up_range(hole):
+    a, b = sorted((rank_of(c) for c in hole), reverse=True)
+    return a == b or a >= 13 or (a == 12 and b >= 8)
+
+
 class Player:
-    VERSION = "ultragood_python_playerv0.3.0"
+    VERSION = "ultragood_python_playerv0.4.0"
 
     def betRequest(self, game_state):
         try:
@@ -84,8 +100,18 @@ class Player:
         big_blind = 2 * game_state.get("small_blind", 2)
         unraised = game_state["current_buy_in"] <= big_blind
 
+        alive = [p for p in game_state["players"] if p.get("status") != "out"]
+
+        if not board and stack <= 15 * big_blind:
+            # Push or fold when short: big blinds are worth too much to bet-then-fold.
+            if unraised:
+                return stack if shove_range(hole) else 0
+            return stack if call_shove_range(hole) else 0
+
         if not board:
             strength = preflop_strength(hole)
+            if len(alive) == 2 and heads_up_range(hole):
+                strength = max(strength, 1)
             already_raised = me["bet"] > big_blind
             if strength >= 1 and unraised:
                 return min(max(min_raise, 3 * big_blind), stack)
