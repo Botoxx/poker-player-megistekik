@@ -52,11 +52,15 @@ class BetRequestTest(unittest.TestCase):
         self.assertEqual(Player().betRequest(state(["Jh", "10d"], current_buy_in=60)), 50)
 
     def test_two_pair_postflop_raises(self):
-        bet = Player().betRequest(state(["Ah", "9d"], board=["As", "9c", "2h"]))
-        self.assertGreaterEqual(bet, 30)
+        bet = Player().betRequest(state(["Ah", "9d"], board=["As", "9c", "2h"], current_buy_in=10))
+        self.assertGreaterEqual(bet, 20)
 
     def test_board_pair_only_folds(self):
         self.assertEqual(Player().betRequest(state(["7h", "2d"], board=["Ks", "Kc", "4h"])), 0)
+
+    def test_jacks_do_not_reraise_war(self):
+        # We opened to 84, opponent re-raised to 780: jacks must fold, not re-raise.
+        self.assertEqual(Player().betRequest(state(["Js", "Jc"], current_buy_in=780, my_bet=84, stack=900)), 0)
 
     def test_bet_never_exceeds_stack(self):
         self.assertLessEqual(Player().betRequest(state(["Ah", "Ad"], stack=15)), 15)

@@ -58,8 +58,13 @@ def preflop_strength(hole):
     return 0
 
 
+def is_monster(hole):
+    a, b = sorted((rank_of(c) for c in hole), reverse=True)
+    return (a == b and a >= 12) or (a == 14 and b == 13)
+
+
 class Player:
-    VERSION = "ultragood_python_playerv0.2.0"
+    VERSION = "ultragood_python_playerv0.3.0"
 
     def betRequest(self, game_state):
         try:
@@ -81,29 +86,41 @@ class Player:
 
         if not board:
             strength = preflop_strength(hole)
-            if strength == 2:
-                return min(max(min_raise, 3 * game_state["current_buy_in"], 3 * big_blind), stack)
-            if strength == 1 and unraised:
+            already_raised = me["bet"] > big_blind
+            if strength >= 1 and unraised:
                 return min(max(min_raise, 3 * big_blind), stack)
-            if strength == 1 and to_call <= stack // 10:
+            if strength == 2 and not already_raised:
+                return min(max(min_raise, 3 * game_state["current_buy_in"]), stack)
+            # Facing a re-raise: only monsters continue for big amounts; never re-raise again.
+            if is_monster(hole):
+                return min(to_call, stack)
+            limit = stack // 5 if strength == 2 else stack // 10
+            if strength >= 1 and to_call <= limit:
                 return min(to_call, stack)
             return 0
 
         category = hand_category(hole + board)
         board_category = hand_category(board) if len(board) >= 2 else HIGH_CARD
         pot = game_state.get("pot", 0)
+        bet_size = min(max(min_raise, pot // 2), stack)
         # Only count hands where our hole cards add something over the board.
         if category > board_category:
-            if category >= TWO_PAIR:
-                return min(max(min_raise, pot // 2), stack)
-            if category == PAIR:
+            if category >= TRIPS:
+                return bet_size
+            if category == TWO_PAIR:
                 if to_call == 0:
-                    return min(max(min_raise, pot // 2), stack)
-                if to_call <= stack // 5:
+                    return bet_size
+                return min(to_call, stack) if to_call <= stack // 3 else 0
+            if category == PAIR:
+                top = max(rank_of(c) for c in hole) >= max(rank_of(c) for c in board)
+                if top and to_call == 0:
+                    return bet_size
+                if to_call <= (stack // 5 if top else stack // 20):
                     return min(to_call, stack)
+                return 0
         # Continuation bet: we were last to raise before the flop and nobody bet yet.
         if to_call == 0 and len(board) == 3 and preflop_strength(hole) >= 1:
-            return min(max(min_raise, pot // 2), stack)
+            return bet_size
         return 0
 
     def showdown(self, game_state):
