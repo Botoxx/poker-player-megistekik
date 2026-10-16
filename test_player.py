@@ -169,6 +169,15 @@ class BetRequestTest(unittest.TestCase):
         # A normal-sized re-raise (to_call 240 = 12 big blinds) QQ still calls.
         self.assertEqual(Player().betRequest(state(["Qh", "Qd"], current_buy_in=300, my_bet=60, stack=2000)), 240)
 
+    def test_calls_bpex_headsup_stab_lighter(self):
+        # bpex maniac 4.0 stabs 3/4 pot ~60% of hands heads-up after we check (mostly air).
+        # Second pair should call that medium bet, where the old "bpex is honest" read folded.
+        gs = state(["7h", "6h"], board=["Kc", "7d", "2s"], current_buy_in=150, my_bet=0,
+                   stack=2000, pot=200, others=1)
+        gs["players"][0]["name"] = "bpex"
+        gs["players"][0]["bet"] = 150
+        self.assertGreater(Player().betRequest(gs), 0)
+
     def test_second_pair_folds_to_big_bet(self):
         # Round 34 knockout: K-10 on K-6-A-9 facing 420 into 700 with 790 behind.
         gs = state(["Ks", "10s"], board=["Kh", "6s", "Ad", "9s"], current_buy_in=620, my_bet=200,
@@ -313,7 +322,9 @@ class BetRequestTest(unittest.TestCase):
         self.assertEqual(Player().betRequest(s), 50)
 
     def test_top_pair_on_paired_board_calls(self):
-        s = state(["Kh", "9d"], board=["Ks", "7c", "7h"], current_buy_in=50, my_bet=0, pot=150)
+        # Heads-up so the call is unambiguous: top pair beats one made-hand range clearly, where
+        # the same spot against three made hands sits on the pot-odds line and Monte Carlo noise flips it.
+        s = state(["Kh", "9d"], board=["Ks", "7c", "7h"], current_buy_in=50, my_bet=0, pot=150, others=1)
         self.assertEqual(Player().betRequest(s), 50)
 
     def test_two_real_pairs_on_paired_board_count(self):

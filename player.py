@@ -296,7 +296,7 @@ def light_3bet_range(hole):
 
 
 class Player:
-    VERSION = "ultragood_python_playerv0.23.0"
+    VERSION = "ultragood_python_playerv0.24.0"
 
     def betRequest(self, game_state):
         try:
@@ -488,6 +488,10 @@ class Player:
             # Their source has no pure bluffs, except bpex's small heads-up flop/turn bets (30% bluffs).
             small_bpex = bettor["name"] == "bpex" and len(board) < 5 and to_call * 5 <= pot * 2
             level = 1 if small_bpex else 2
+            # bpex maniac 4.0 stabs 3/4 pot ~60% of hands heads-up after we check and mixes in
+            # semi-bluffs; only its big bets are value (two pair+). Treat other heads-up bets as air.
+            if bettor["name"] == "bpex" and opponents == 1 and not big_bet:
+                level = 0
         if profile == "bluffer":
             level = max(level - 1, 0)
         others = [q for i, q in enumerate(game_state["players"])
