@@ -91,6 +91,12 @@ def tight_shove_range(hole):
     return (a == b and a >= 5) or (a == 14 and b >= 9) or (a == 13 and b == 12)
 
 
+def wide_call_range(hole):
+    """Hands ahead of a ~30% shoving range."""
+    a, b = sorted((rank_of(c) for c in hole), reverse=True)
+    return (a == b and a >= 6) or (a == 14 and b >= 10) or (a == 13 and b == 12)
+
+
 def call_shove_range(hole):
     a, b = sorted((rank_of(c) for c in hole), reverse=True)
     return (a == b and a >= 9) or (a == 14 and b >= 12)
@@ -119,26 +125,30 @@ def observe(game_state):
     for i, p in enumerate(game_state["players"]):
         if i == game_state["in_action"] or p.get("status") == "out":
             continue
-        s = game.setdefault(p["name"], {"hands": set(), "raises": set()})
+        s = game.setdefault(p["name"], {"hands": set(), "raises": set(), "shoves": set()})
         s["hands"].add(rnd)
         if p.get("bet", 0) > big_blind:
             s["raises"].add(rnd)
+        if p.get("bet", 0) > 0 and p.get("stack", 1) == 0:
+            s["shoves"].add(rnd)
 
 
 def raiser_style(game_state):
-    """Return "loose", "tight" or None for the opponent holding the current highest bet."""
+    """Return "shover", "loose", "tight" or None for the opponent holding the current highest bet."""
     me = game_state["in_action"]
     top = max((p for i, p in enumerate(game_state["players"]) if i != me),
               key=lambda p: p.get("bet", 0), default=None)
     s = OPPONENTS.get(game_state.get("game_id", "?"), {}).get(top["name"]) if top else None
     if not s or len(s["hands"]) < MIN_HANDS:
         return None
+    if len(s.get("shoves", ())) / len(s["hands"]) >= 0.15:
+        return "shover"
     freq = len(s["raises"]) / len(s["hands"])
     return "loose" if freq >= 0.35 else "tight" if freq < 0.12 else None
 
 
 class Player:
-    VERSION = "ultragood_python_playerv0.9.0"
+    VERSION = "ultragood_python_playerv0.10.0"
 
     def betRequest(self, game_state):
         try:
@@ -174,7 +184,7 @@ class Player:
                 # Opponents call wide against frequent shovers; only shove wide when desperate.
                 in_range = shove_range(hole) if stack <= 10 * big_blind else tight_shove_range(hole)
                 return stack if in_range else 0
-            wide = style == "loose" and shove_range(hole)
+            wide = (style == "loose" and shove_range(hole)) or (style == "shover" and wide_call_range(hole))
             return stack if call_shove_range(hole) or wide else 0
 
         if not board:
@@ -188,6 +198,8 @@ class Player:
                 return min(max(min_raise, 3 * game_state["current_buy_in"]), stack)
             # Facing a re-raise: only monsters continue for big amounts; never re-raise again.
             if is_monster(hole):
+                return min(to_call, stack)
+            if style == "shover" and wide_call_range(hole):
                 return min(to_call, stack)
             if style == "tight" and to_call > 4 * big_blind:
                 return 0

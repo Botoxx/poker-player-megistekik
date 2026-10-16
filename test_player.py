@@ -91,6 +91,19 @@ class BetRequestTest(unittest.TestCase):
     def test_twelve_big_blinds_folds_queen_jack(self):
         self.assertEqual(Player().betRequest(state(["Qd", "Jd"], stack=240)), 0)
 
+    def test_calls_frequent_shover_with_pocket_sevens(self):
+        import player
+        player.OPPONENTS.clear()
+        for rnd in range(10):  # "other" shoves every hand
+            gs = state(["7h", "2d"], current_buy_in=1000)
+            gs.update(game_id="s", round=rnd)
+            gs["players"][0].update(bet=1000, stack=0)
+            Player().betRequest(gs)
+        gs = state(["7c", "7d"], current_buy_in=1000, my_bet=60, stack=940)
+        gs.update(game_id="s", round=11)
+        gs["players"][0].update(bet=1000, stack=0)
+        self.assertEqual(Player().betRequest(gs), 940)
+
     def test_bet_never_exceeds_stack(self):
         self.assertLessEqual(Player().betRequest(state(["Ah", "Ad"], stack=15)), 15)
 
