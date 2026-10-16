@@ -207,6 +207,32 @@ class BetRequestTest(unittest.TestCase):
         gs["small_blind"] = 50
         self.assertEqual(Player().betRequest(gs), 300)
 
+    def test_calls_nontekik_reshove_with_sixes(self):
+        gs = state(["6h", "6d"], current_buy_in=400, my_bet=60, stack=900)
+        gs["players"][0].update(name="nontekik", bet=400, stack=0)
+        self.assertEqual(Player().betRequest(gs), 340)
+
+    def test_folds_tens_to_big_bpex_open(self):
+        gs = state(["10h", "10d"], current_buy_in=140, my_bet=0, stack=1000)
+        gs["players"][0].update(name="bpex", bet=140)
+        self.assertEqual(Player().betRequest(gs), 0)
+
+    def test_bets_into_nontechyk_check_heads_up(self):
+        gs = state(["7h", "2d"], board=["Kc", "9s", "4d"], current_buy_in=0, my_bet=0, pot=200, others=1)
+        gs["players"][0].update(name="nontechyk", bet=0)
+        self.assertEqual(Player().betRequest(gs), 110)
+
+    def test_folds_second_pair_to_honest_half_pot_river_bet(self):
+        gs = state(["Ks", "10s"], board=["Kh", "6s", "Ad", "9s", "2c"], current_buy_in=150, my_bet=0,
+                   stack=900, pot=450, others=1)
+        gs["players"][0].update(name="nontechyk", bet=150)
+        self.assertEqual(Player().betRequest(gs), 0)
+
+    def test_min_raises_premium_when_nontekik_alive(self):
+        gs = state(["Ah", "Ad"], current_buy_in=20, my_bet=0)
+        gs["players"][2]["name"] = "nontekik"
+        self.assertEqual(Player().betRequest(gs), 40)
+
     def test_bet_never_exceeds_stack(self):
         self.assertLessEqual(Player().betRequest(state(["Ah", "Ad"], stack=15)), 15)
 

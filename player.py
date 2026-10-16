@@ -220,8 +220,25 @@ def bettor_profile(game_state):
     return None
 
 
+# Counters read from the opponents' public source (16 Oct). All three value-bet and rarely bluff.
+HONEST_BETTORS = {"nontechyk", "nontekik", "bpex"}
+
+
+def top_bettor(game_state):
+    """The opponent holding the highest bet, or None."""
+    me = game_state["in_action"]
+    return max((p for i, p in enumerate(game_state["players"]) if i != me),
+               key=lambda p: p.get("bet", 0), default=None)
+
+
+def resteal_call_range(hole):
+    """nontekik re-shoves its top 30% over our opens; these hands are ahead of that range."""
+    a, b = sorted((rank_of(c) for c in hole), reverse=True)
+    return (a == b and a >= 6) or (a == 14 and b >= 9) or (a == 13 and b >= 11)
+
+
 class Player:
-    VERSION = "ultragood_python_playerv0.19.0"
+    VERSION = "ultragood_python_playerv0.20.0"
 
     def betRequest(self, game_state):
         try:
@@ -252,6 +269,12 @@ class Player:
             style = None
 
         heads_up = len(alive) == 2
+        raiser = top_bettor(game_state) if not board and not unraised else None
+        if raiser and raiser["name"] == "nontekik" and raiser.get("stack", 1) == 0 and resteal_call_range(hole):
+            return min(to_call, stack)
+        if (raiser and raiser["name"] == "bpex" and me["bet"] <= big_blind
+                and raiser.get("bet", 0) >= 6 * big_blind and not is_monster(hole)):
+            return 0  # bpex opens about 6.5 big blinds only with JJ+ / AKs
         try:
             shover = shover_alive(game_state)
         except Exception:
@@ -294,6 +317,8 @@ class Player:
             if strength >= 1 and unraised:
                 if shover and strength < 2 and not wide_call_range(hole):
                     return 0  # opening would just get shoved on and folded
+                if strength == 2 and any(q["name"] == "nontekik" for q in alive):
+                    return min(min_raise, stack)  # min-raise looks weak to nontekik and draws re-shoves
                 return min(max(min_raise, 3 * big_blind), stack)
             if strength == 2 and not already_raised:
                 raise_to = max(min_raise, 3 * game_state["current_buy_in"])
@@ -385,8 +410,19 @@ class Player:
             profile = None
         # Any bet means the bettor usually holds a made hand; a big bet means top pair or better.
         level = 0 if to_call == 0 else 2 if big_bet else 1
+        bettor = top_bettor(game_state) if to_call > 0 else None
+        honest = bettor is not None and bettor["name"] in HONEST_BETTORS
+        if honest:
+            # Their source has no pure bluffs, except bpex's small heads-up flop/turn bets (30% bluffs).
+            small_bpex = bettor["name"] == "bpex" and len(board) < 5 and to_call * 5 <= pot * 2
+            level = 1 if small_bpex else 2
         if profile == "bluffer":
             level = max(level - 1, 0)
+        others = [q for i, q in enumerate(game_state["players"])
+                  if i != game_state["in_action"] and q.get("status") == "active"]
+        if to_call == 0 and len(others) == 1 and others[0]["name"] == "nontechyk":
+            # nontechyk only bets with 0.6+ equity and needs about that much to call a 55% pot bet.
+            return min(max(min_raise, 55 * pot // 100), stack)
         win, sims = equity(hole, board, opponents, range_level=level)
         if sims < 100:
             return None
@@ -399,7 +435,7 @@ class Player:
         # A bettor's range beats a random hand: discount up to 10 points as the bet grows toward the pot.
         win -= 0.10 * min(1.0, to_call / max(pot, 1))
         price = to_call / (pot + to_call)
-        floor = {"bluffer": 0.0, "honest": 0.60}.get(profile, 0.55)
+        floor = {"bluffer": 0.0, "honest": 0.60}.get(profile, 0.60 if honest else 0.55)
         if big_bet and win < floor:
             return 0
         if win >= 0.80:
