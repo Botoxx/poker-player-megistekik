@@ -1,9 +1,9 @@
 class Player:
-    VERSION = "ultragood_python_playerv0.0.2"
+    VERSION = "ultragood_python_playerv0.0.3"
 
     def betRequest(self, game_state):
-
-        return 100
+        self.bet = 10
+        return 0
 
     def showdown(self, game_state):
         pass
