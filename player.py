@@ -121,7 +121,7 @@ def raiser_style(game_state):
 
 
 class Player:
-    VERSION = "ultragood_python_playerv0.7.0"
+    VERSION = "ultragood_python_playerv0.8.0"
 
     def betRequest(self, game_state):
         try:
@@ -198,14 +198,13 @@ class Player:
                 return min(to_call, stack) if to_call <= stack // 3 else 0
             if category == PAIR:
                 top = max(rank_of(c) for c in hole) >= max(rank_of(c) for c in board)
-                if top and to_call == 0 and len(board) < 5 and bet_size <= stack // 4:
+                if top and to_call == 0 and (len(board) < 5 or bet_size <= stack // 4):
                     return bet_size
                 if to_call <= (stack // 5 if top else stack // 20):
                     return min(to_call, stack)
                 return 0
         # Continuation bet: we were last to raise before the flop and nobody bet yet.
-        if (to_call == 0 and len(board) == 3 and preflop_strength(hole) >= 1
-                and in_hand <= 2 and bet_size <= stack // 8):
+        if to_call == 0 and len(board) == 3 and preflop_strength(hole) >= 1 and in_hand <= 2:
             return bet_size
         return 0
 
