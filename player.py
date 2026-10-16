@@ -158,8 +158,21 @@ def hu_call_shove_range(hole):
     return a == b or a == 14 or (a == 13 and b >= 10)
 
 
+def shover_alive(game_state):
+    """True if an opponent still in the game shoves preflop in at least 15% of hands we saw."""
+    game = OPPONENTS.get(game_state.get("game_id", "?"), {})
+    me = game_state["in_action"]
+    for i, p in enumerate(game_state["players"]):
+        s = game.get(p["name"])
+        if i == me or p.get("status") == "out" or not s or len(s["hands"]) < MIN_HANDS:
+            continue
+        if len(s.get("shoves", ())) / len(s["hands"]) >= 0.15:
+            return True
+    return False
+
+
 class Player:
-    VERSION = "ultragood_python_playerv0.12.0"
+    VERSION = "ultragood_python_playerv0.13.0"
 
     def betRequest(self, game_state):
         try:
@@ -190,12 +203,21 @@ class Player:
             style = None
 
         heads_up = len(alive) == 2
+        try:
+            shover = shover_alive(game_state)
+        except Exception:
+            shover = False
         if not board and heads_up:
             # Heads-up the blinds come every hand: folding most hands bleeds the stack.
             if stack <= 15 * big_blind:
                 if unraised:
                     return stack if heads_up_range(hole) else 0
                 return stack if hu_call_shove_range(hole) or is_monster(hole) else 0
+            if unraised and shover:
+                # Against a shover, only raise hands that can call the re-shove; limp the rest.
+                if wide_call_range(hole) or is_monster(hole):
+                    return min(max(min_raise, 5 * big_blind // 2), stack)
+                return min(to_call, stack) if heads_up_range(hole) else 0
             if unraised and hu_open_range(hole):
                 return min(max(min_raise, 5 * big_blind // 2), stack)
             if is_monster(hole):
@@ -221,6 +243,8 @@ class Player:
                 strength = max(strength, 1)
             already_raised = me["bet"] > big_blind
             if strength >= 1 and unraised:
+                if shover and strength < 2 and not wide_call_range(hole):
+                    return 0  # opening would just get shoved on and folded
                 return min(max(min_raise, 3 * big_blind), stack)
             if strength == 2 and not already_raised:
                 return min(max(min_raise, 3 * game_state["current_buy_in"]), stack)

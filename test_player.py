@@ -117,6 +117,18 @@ class BetRequestTest(unittest.TestCase):
         s = state(["Kh", "4d"], current_buy_in=60, my_bet=20, others=1)
         self.assertEqual(Player().betRequest(s), 40)
 
+    def test_no_light_open_when_shover_at_table(self):
+        import player
+        player.OPPONENTS.clear()
+        for rnd in range(10):
+            gs = state(["7h", "2d"], current_buy_in=1000)
+            gs.update(game_id="sh", round=rnd)
+            gs["players"][0].update(bet=1000, stack=0)
+            Player().betRequest(gs)
+        gs = state(["Jh", "10d"])
+        gs.update(game_id="sh", round=11)
+        self.assertEqual(Player().betRequest(gs), 0)
+
     def test_bet_never_exceeds_stack(self):
         self.assertLessEqual(Player().betRequest(state(["Ah", "Ad"], stack=15)), 15)
 
