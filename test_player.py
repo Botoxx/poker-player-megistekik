@@ -140,6 +140,17 @@ class BetRequestTest(unittest.TestCase):
         # A-Q facing a raise to 160 with 700 behind: 3x would be 480, so shove 700 instead.
         self.assertEqual(Player().betRequest(state(["Qh", "As"], current_buy_in=160, my_bet=20, stack=700)), 700)
 
+    def test_second_pair_folds_to_big_bet(self):
+        # Round 34 knockout: K-10 on K-6-A-9 facing 420 into 700 with 790 behind.
+        gs = state(["Ks", "10s"], board=["Kh", "6s", "Ad", "9s"], current_buy_in=620, my_bet=200,
+                   stack=790, pot=700, others=1)
+        self.assertEqual(Player().betRequest(gs), 0)
+
+    def test_set_still_calls_big_bet(self):
+        gs = state(["6d", "6c"], board=["Kh", "6s", "Ad", "9s"], current_buy_in=620, my_bet=200,
+                   stack=790, pot=700, others=1)
+        self.assertGreaterEqual(Player().betRequest(gs), 420)
+
     def test_bet_never_exceeds_stack(self):
         self.assertLessEqual(Player().betRequest(state(["Ah", "Ad"], stack=15)), 15)
 

@@ -174,7 +174,7 @@ def shover_alive(game_state):
 
 
 class Player:
-    VERSION = "ultragood_python_playerv0.15.0"
+    VERSION = "ultragood_python_playerv0.17.0"
 
     def betRequest(self, game_state):
         try:
@@ -318,10 +318,12 @@ class Player:
         """Bet by Monte Carlo win chance against the opponents still in the hand; None to fall back to rules."""
         in_hand = sum(1 for p in game_state["players"] if p.get("status") == "active")
         opponents = max(in_hand - 1, 1)
-        win, sims = equity(hole, board, opponents)
+        pot = game_state.get("pot", 0)
+        big_bet = to_call > 0 and to_call >= stack // 4 and to_call >= pot // 2
+        # A bet of a quarter of our stack and half the pot means a made hand, not a random one.
+        win, sims = equity(hole, board, opponents, strong_range=big_bet)
         if sims < 100:
             return None
-        pot = game_state.get("pot", 0)
         if to_call == 0:
             if win >= 0.65:
                 return min(max(min_raise, 2 * pot // 3), stack)
@@ -331,6 +333,8 @@ class Player:
         # A bettor's range beats a random hand: discount up to 10 points as the bet grows toward the pot.
         win -= 0.10 * min(1.0, to_call / max(pot, 1))
         price = to_call / (pot + to_call)
+        if big_bet and win < 0.55:
+            return 0
         if win >= 0.80:
             return min(max(min_raise, pot), stack)
         if win >= price + 0.03:

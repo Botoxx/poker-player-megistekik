@@ -57,8 +57,30 @@ def evaluate7(cards):
     return (0,) + tuple(singles[:5])
 
 
-def equity(hole, board, opponents, budget_s=0.15, max_sims=800, rng=random):
-    """Share of pots we win against `opponents` random hands. Returns (equity, simulations run)."""
+def max_pair_category(shared):
+    """Category the board alone shows with 3-4 cards: 1 if paired, 3 for trips, else 0."""
+    top = max(Counter(r for r, _ in shared).values(), default=1)
+    return {1: 0, 2: 1, 3: 3, 4: 7}[top]
+
+
+def improves_board(hand, shared, board_score):
+    """True if two hole cards make top pair or better with the current board.
+
+    That means two pair or better that the board alone doesn't show, or a pair at least as
+    high as the board's top card (top pair or an overpair).
+    """
+    score = evaluate7(hand + shared)
+    if score[0] <= board_score[0]:
+        return False
+    return score[0] >= 2 or score[1] >= max(r for r, _ in shared)
+
+
+def equity(hole, board, opponents, budget_s=0.15, max_sims=800, rng=random, strong_range=False):
+    """Share of pots we win against `opponents` hands. Returns (equity, simulations run).
+
+    With strong_range, opponents only hold top pair or better with the current board,
+    which is what a big bet usually means.
+    """
     mine = [to_tuple(c) for c in hole]
     shared = [to_tuple(c) for c in board]
     known = set(mine + shared)
@@ -66,9 +88,14 @@ def equity(hole, board, opponents, budget_s=0.15, max_sims=800, rng=random):
     need_board = 5 - len(shared)
     draw = 2 * opponents + need_board
     deadline = time.monotonic() + budget_s
+    board_score = evaluate7(shared) if len(shared) >= 5 else (max_pair_category(shared),)
     won, sims = 0.0, 0
     while sims < max_sims and time.monotonic() < deadline:
         dealt = rng.sample(remaining, draw)
+        if strong_range and len(shared) >= 3 and not all(
+                improves_board(dealt[need_board + 2 * i:need_board + 2 * i + 2], shared, board_score)
+                for i in range(opponents)):
+            continue  # rejected deal: does not count as a simulation
         full_board = shared + dealt[:need_board]
         ours = evaluate7(mine + full_board)
         best_other = max(evaluate7(dealt[need_board + 2 * i:need_board + 2 * i + 2] + full_board)
