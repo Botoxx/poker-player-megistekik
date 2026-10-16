@@ -285,7 +285,7 @@ def resteal_call_range(hole):
 
 
 class Player:
-    VERSION = "ultragood_python_playerv0.20.0"
+    VERSION = "ultragood_python_playerv0.21.0"
 
     def betRequest(self, game_state):
         try:
