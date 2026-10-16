@@ -1,5 +1,6 @@
 import unittest
 
+import player
 from player import Player, hand_category, preflop_strength, PAIR, TWO_PAIR, STRAIGHT, FLUSH, FULL_HOUSE
 
 
@@ -22,6 +23,32 @@ def state(hole, board=(), current_buy_in=20, my_bet=10, stack=1000, minimum_rais
              "hole_cards": [c(x) for x in hole]},
         ] + [{"name": f"extra{i}", "stack": 1000, "bet": 0, "status": "active"} for i in range(others - 1)],
     }
+
+
+# Never call the network from tests; individual tests swap in their own answer.
+player.laya_ask = lambda text: None
+
+
+class LayaOverrideTest(unittest.TestCase):
+    def tearDown(self):
+        player.laya_ask = lambda text: None
+
+    def spot(self):
+        return state(["Ah", "7h"], board=["2h", "9h", "Kc"], current_buy_in=120, my_bet=100, stack=900, pot=400, others=1)
+
+    def test_confident_raise_is_followed(self):
+        player.laya_ask = lambda text: "raise"
+        self.assertGreater(Player().betRequest(self.spot()), 20)
+
+    def test_laya_error_falls_back_to_equity(self):
+        def boom(text):
+            raise RuntimeError("network down")
+        player.laya_ask = boom
+        self.assertEqual(Player().betRequest(self.spot()), 20)
+
+    def test_unsure_laya_keeps_equity_decision(self):
+        player.laya_ask = lambda text: None
+        self.assertEqual(Player().betRequest(self.spot()), 20)
 
 
 class HandCategoryTest(unittest.TestCase):

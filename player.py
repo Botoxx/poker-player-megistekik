@@ -3,6 +3,7 @@ import traceback
 from collections import Counter
 
 from equity import equity
+from laya import ask as laya_ask
 
 RANKS = {str(n): n for n in range(2, 11)}
 RANKS.update({"T": 10, "J": 11, "Q": 12, "K": 13, "A": 14})
@@ -174,7 +175,7 @@ def shover_alive(game_state):
 
 
 class Player:
-    VERSION = "ultragood_python_playerv0.15.0"
+    VERSION = "ultragood_python_playerv0.16.0"
 
     def betRequest(self, game_state):
         try:
@@ -332,10 +333,32 @@ class Player:
         win -= 0.10 * min(1.0, to_call / max(pot, 1))
         price = to_call / (pot + to_call)
         if win >= 0.80:
-            return min(max(min_raise, pot), stack)
-        if win >= price + 0.03:
+            decision = min(max(min_raise, pot), stack)
+        elif win >= price + 0.03:
+            decision = min(to_call, stack)
+        else:
+            decision = 0
+        return self.laya_override(game_state, hole, board, stack, to_call, min_raise, pot, opponents, win, price, decision)
+
+    def laya_override(self, game_state, hole, board, stack, to_call, min_raise, pot, opponents, win, price, decision):
+        """Let Laya pick the action when it is confident; keep the equity decision otherwise."""
+        text = (f"Texas hold'em tournament, {opponents} opponent(s) still in the hand. "
+                f"We hold {' '.join(c['rank'] + c['suit'][0] for c in hole)}. "
+                f"Board: {' '.join(c['rank'] + c['suit'][0] for c in board)}. "
+                f"Pot {pot} chips, {to_call} to call, {stack} chips behind. "
+                f"Our estimated win chance is {win:.0%}; calling needs {price:.0%}.")
+        try:
+            choice = laya_ask(text)
+        except Exception:
+            traceback.print_exc(file=sys.stderr)
+            choice = None
+        if choice == "fold":
+            return 0
+        if choice == "call":
             return min(to_call, stack)
-        return 0
+        if choice == "raise":
+            return min(max(min_raise, pot // 2, decision), stack)
+        return decision
 
     def showdown(self, game_state):
         pass
