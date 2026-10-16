@@ -88,6 +88,9 @@ class BetRequestTest(unittest.TestCase):
         gs["game_id"] = "fresh"  # no reads in a new game: fold the same spot
         self.assertEqual(Player().betRequest(gs), 0)
 
+    def test_twelve_big_blinds_folds_queen_jack(self):
+        self.assertEqual(Player().betRequest(state(["Qd", "Jd"], stack=240)), 0)
+
     def test_bet_never_exceeds_stack(self):
         self.assertLessEqual(Player().betRequest(state(["Ah", "Ad"], stack=15)), 15)
 

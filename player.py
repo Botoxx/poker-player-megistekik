@@ -69,6 +69,11 @@ def shove_range(hole):
     return a == b or a == 14 or (a == 13 and b >= 10) or (a == 12 and b == 11) or (suited and b >= 10)
 
 
+def tight_shove_range(hole):
+    a, b = sorted((rank_of(c) for c in hole), reverse=True)
+    return (a == b and a >= 5) or (a == 14 and b >= 9) or (a == 13 and b == 12)
+
+
 def call_shove_range(hole):
     a, b = sorted((rank_of(c) for c in hole), reverse=True)
     return (a == b and a >= 9) or (a == 14 and b >= 12)
@@ -116,7 +121,7 @@ def raiser_style(game_state):
 
 
 class Player:
-    VERSION = "ultragood_python_playerv0.6.0"
+    VERSION = "ultragood_python_playerv0.7.0"
 
     def betRequest(self, game_state):
         try:
@@ -149,7 +154,9 @@ class Player:
         if not board and stack <= 15 * big_blind:
             # Push or fold when short: big blinds are worth too much to bet-then-fold.
             if unraised:
-                return stack if shove_range(hole) else 0
+                # Opponents call wide against frequent shovers; only shove wide when desperate.
+                in_range = shove_range(hole) if stack <= 10 * big_blind else tight_shove_range(hole)
+                return stack if in_range else 0
             wide = style == "loose" and shove_range(hole)
             return stack if call_shove_range(hole) or wide else 0
 
