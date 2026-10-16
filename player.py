@@ -45,6 +45,23 @@ def hand_category(cards):
     return HIGH_CARD
 
 
+
+def has_open_ended_draw(cards):
+    unique = {rank_of(c) for c in cards}
+    # Four in a row with room on both ends; A-2-3-4 and J-Q-K-A only fill one way.
+    return any(all(r + i in unique for i in range(4)) for r in range(2, 11))
+
+
+def has_draw(hole, board):
+    """True if our hole cards make a flush or open-ended straight draw the board alone doesn't."""
+    cards = hole + board
+    suits = Counter(c["suit"] for c in cards)
+    hole_suits = {c["suit"] for c in hole}
+    if any(n == 4 and s in hole_suits for s, n in suits.items()):
+        return True
+    return has_open_ended_draw(cards) and not has_open_ended_draw(board)
+
+
 def preflop_strength(hole):
     """Return 2 for premium, 1 for playable, 0 for trash."""
     a, b = sorted((rank_of(c) for c in hole), reverse=True)
@@ -206,6 +223,11 @@ class Player:
         # Continuation bet: we were last to raise before the flop and nobody bet yet.
         if to_call == 0 and len(board) == 3 and preflop_strength(hole) >= 1 and in_hand <= 2:
             return bet_size
+        # Chase draws only before the river and only when the pot pays for it.
+        if to_call > 0 and len(board) in (3, 4) and has_draw(hole, board):
+            max_call = pot // 3 if len(board) == 3 else pot // 5
+            if to_call <= min(max_call, stack // 10):
+                return to_call
         return 0
 
     def showdown(self, game_state):

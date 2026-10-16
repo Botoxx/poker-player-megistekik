@@ -94,6 +94,26 @@ class BetRequestTest(unittest.TestCase):
     def test_bet_never_exceeds_stack(self):
         self.assertLessEqual(Player().betRequest(state(["Ah", "Ad"], stack=15)), 15)
 
+    def test_flush_draw_calls_when_cheap(self):
+        s = state(["Ah", "7h"], board=["2h", "9h", "Kc"], current_buy_in=20, my_bet=0, pot=100)
+        self.assertEqual(Player().betRequest(s), 20)
+
+    def test_open_ended_draw_calls_when_cheap(self):
+        s = state(["8d", "9c"], board=["10h", "Js", "2c"], current_buy_in=20, my_bet=0, pot=100)
+        self.assertEqual(Player().betRequest(s), 20)
+
+    def test_draw_folds_when_too_expensive(self):
+        s = state(["Ah", "7h"], board=["2h", "9h", "Kc"], current_buy_in=80, my_bet=0, pot=100)
+        self.assertEqual(Player().betRequest(s), 0)
+
+    def test_draw_folds_on_river(self):
+        s = state(["Ah", "7h"], board=["2h", "9h", "Kc", "3d", "4s"], current_buy_in=20, my_bet=0, pot=100)
+        self.assertEqual(Player().betRequest(s), 0)
+
+    def test_board_flush_draw_without_our_suit_folds(self):
+        s = state(["Ac", "7d"], board=["2h", "9h", "Kh", "3h"], current_buy_in=10, my_bet=0, pot=100)
+        self.assertEqual(Player().betRequest(s), 0)
+
     def test_bad_state_returns_zero(self):
         self.assertEqual(Player().betRequest({}), 0)
 
