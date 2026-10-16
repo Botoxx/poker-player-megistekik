@@ -8,7 +8,7 @@ def c(spec):
     return {"rank": rank, "suit": suit}
 
 
-def state(hole, board=(), current_buy_in=20, my_bet=10, stack=1000, minimum_raise=20, pot=30):
+def state(hole, board=(), current_buy_in=20, my_bet=10, stack=1000, minimum_raise=20, pot=30, others=3):
     return {
         "small_blind": 10,
         "current_buy_in": current_buy_in,
@@ -20,7 +20,7 @@ def state(hole, board=(), current_buy_in=20, my_bet=10, stack=1000, minimum_rais
             {"name": "other", "stack": 1000, "bet": 20, "status": "active"},
             {"name": "us", "stack": stack, "bet": my_bet, "status": "active",
              "hole_cards": [c(x) for x in hole]},
-        ],
+        ] + [{"name": f"extra{i}", "stack": 1000, "bet": 0, "status": "active"} for i in range(others - 1)],
     }
 
 
@@ -108,6 +108,14 @@ class BetRequestTest(unittest.TestCase):
         # KK on Q-6-4 facing 300 into a 1200 pot: 4:1, call even though it is over a fifth of our stack.
         s = state(["Kh", "Kd"], board=["4d", "Qh", "6d"], current_buy_in=300, my_bet=0, stack=1000, pot=1200)
         self.assertEqual(Player().betRequest(s), 300)
+
+    def test_heads_up_opens_weak_suited_hand(self):
+        s = state(["7h", "3h"], current_buy_in=20, my_bet=10, others=1)
+        self.assertEqual(Player().betRequest(s), 50)
+
+    def test_heads_up_defends_king_rag(self):
+        s = state(["Kh", "4d"], current_buy_in=60, my_bet=20, others=1)
+        self.assertEqual(Player().betRequest(s), 40)
 
     def test_bet_never_exceeds_stack(self):
         self.assertLessEqual(Player().betRequest(state(["Ah", "Ad"], stack=15)), 15)

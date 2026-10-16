@@ -147,8 +147,19 @@ def raiser_style(game_state):
     return "loose" if freq >= 0.35 else "tight" if freq < 0.12 else None
 
 
+def hu_open_range(hole):
+    """About 70% of hands: what to raise heads-up when nobody has raised."""
+    a, b = sorted((rank_of(c) for c in hole), reverse=True)
+    return a == b or a >= 10 or hole[0]["suit"] == hole[1]["suit"] or a - b <= 2
+
+
+def hu_call_shove_range(hole):
+    a, b = sorted((rank_of(c) for c in hole), reverse=True)
+    return a == b or a == 14 or (a == 13 and b >= 10)
+
+
 class Player:
-    VERSION = "ultragood_python_playerv0.11.0"
+    VERSION = "ultragood_python_playerv0.12.0"
 
     def betRequest(self, game_state):
         try:
@@ -177,6 +188,22 @@ class Player:
             style = raiser_style(game_state) if not unraised else None
         except Exception:
             style = None
+
+        heads_up = len(alive) == 2
+        if not board and heads_up:
+            # Heads-up the blinds come every hand: folding most hands bleeds the stack.
+            if stack <= 15 * big_blind:
+                if unraised:
+                    return stack if heads_up_range(hole) else 0
+                return stack if hu_call_shove_range(hole) or is_monster(hole) else 0
+            if unraised and hu_open_range(hole):
+                return min(max(min_raise, 5 * big_blind // 2), stack)
+            if is_monster(hole):
+                return min(max(min_raise, 3 * game_state["current_buy_in"]), stack) if me["bet"] <= big_blind else min(to_call, stack)
+            if heads_up_range(hole) and to_call <= stack // 6:
+                return min(to_call, stack)
+            if not unraised:
+                return 0
 
         if not board and stack <= 15 * big_blind:
             # Push or fold when short: big blinds are worth too much to bet-then-fold.
