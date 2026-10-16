@@ -284,8 +284,19 @@ def resteal_call_range(hole):
     return (a == b and a >= 6) or (a == 14 and b >= 9) or (a == 13 and b >= 11)
 
 
+def light_3bet_range(hole):
+    """~30% of hands: what we re-raise over nontekik's wide open to make it fold its junk."""
+    a, b = sorted((rank_of(c) for c in hole), reverse=True)
+    suited = hole[0]["suit"] == hole[1]["suit"]
+    if a == b:
+        return True  # any pair
+    if suited:
+        return a == 14 or (a >= 10 and b >= 10) or (a - b == 1 and b >= 4)
+    return a >= 12 and b >= 11  # KQo/AQo/AJo/AKo
+
+
 class Player:
-    VERSION = "ultragood_python_playerv0.21.0"
+    VERSION = "ultragood_python_playerv0.22.0"
 
     def betRequest(self, game_state):
         try:
@@ -322,6 +333,14 @@ class Player:
         if (raiser and raiser["name"] == "bpex" and me["bet"] <= big_blind
                 and raiser.get("bet", 0) >= 6 * big_blind and not is_monster(hole)):
             return 0  # bpex opens about 6.5 big blinds only with JJ+ / AKs
+        # nontekik v1.1.2 opens 60-70% and folds to re-pressure when deep: 3-bet to take it down.
+        if (raiser and raiser["name"] == "nontekik" and me["bet"] <= big_blind
+                and big_blind < raiser.get("bet", 0) <= 4 * big_blind
+                and stack > 30 * big_blind and raiser.get("stack", 0) > 25 * big_blind
+                and (is_monster(hole) or wide_call_range(hole) or light_3bet_range(hole))):
+            three_bet = min(3 * raiser["bet"], stack)
+            if three_bet <= stack // 4:
+                return three_bet
         try:
             shover = shover_alive(game_state)
         except Exception:

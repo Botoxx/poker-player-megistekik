@@ -254,6 +254,27 @@ class BetRequestTest(unittest.TestCase):
         gs["players"][2]["name"] = "nontekik"
         self.assertEqual(Player().betRequest(gs), 40)
 
+    def test_three_bets_nontekik_open_with_suited_broadway(self):
+        gs = state(["Kh", "Qh"], current_buy_in=44, my_bet=0, stack=1000)
+        gs["players"][0].update(name="nontekik", bet=44, stack=1000)
+        self.assertEqual(Player().betRequest(gs), 132)
+
+    def test_does_not_three_bet_nontekik_open_with_trash(self):
+        gs = state(["7h", "2d"], current_buy_in=44, my_bet=0, stack=1000)
+        gs["players"][0].update(name="nontekik", bet=44, stack=1000)
+        self.assertEqual(Player().betRequest(gs), 0)
+
+    def test_no_light_three_bet_when_short(self):
+        # 10 big blinds: push/fold must run, not the deep 3-bet.
+        gs = state(["Kh", "Qh"], current_buy_in=44, my_bet=0, stack=200)
+        gs["players"][0].update(name="nontekik", bet=44, stack=1000)
+        self.assertNotEqual(Player().betRequest(gs), 132)
+
+    def test_no_light_three_bet_vs_other_opponent(self):
+        gs = state(["Kh", "Qh"], current_buy_in=44, my_bet=0, stack=1000)
+        gs["players"][0].update(name="randobot", bet=44, stack=1000)
+        self.assertNotEqual(Player().betRequest(gs), 132)
+
     def test_bet_never_exceeds_stack(self):
         self.assertLessEqual(Player().betRequest(state(["Ah", "Ad"], stack=15)), 15)
 
