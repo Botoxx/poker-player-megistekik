@@ -59,7 +59,7 @@ def preflop_strength(hole):
 
 
 class Player:
-    VERSION = "ultragood_python_playerv0.1.0"
+    VERSION = "ultragood_python_playerv0.2.0"
 
     def betRequest(self, game_state):
         try:
@@ -76,22 +76,34 @@ class Player:
         to_call = max(game_state["current_buy_in"] - me["bet"], 0)
         min_raise = to_call + game_state.get("minimum_raise", 0)
 
+        big_blind = 2 * game_state.get("small_blind", 2)
+        unraised = game_state["current_buy_in"] <= big_blind
+
         if not board:
             strength = preflop_strength(hole)
             if strength == 2:
-                return min(max(min_raise, 4 * game_state.get("small_blind", 10)), stack)
+                return min(max(min_raise, 3 * game_state["current_buy_in"], 3 * big_blind), stack)
+            if strength == 1 and unraised:
+                return min(max(min_raise, 3 * big_blind), stack)
             if strength == 1 and to_call <= stack // 10:
                 return min(to_call, stack)
             return 0
 
         category = hand_category(hole + board)
         board_category = hand_category(board) if len(board) >= 2 else HIGH_CARD
+        pot = game_state.get("pot", 0)
         # Only count hands where our hole cards add something over the board.
         if category > board_category:
             if category >= TWO_PAIR:
-                return min(max(min_raise, game_state.get("pot", 0) // 2), stack)
-            if category == PAIR and to_call <= stack // 5:
-                return min(to_call, stack)
+                return min(max(min_raise, pot // 2), stack)
+            if category == PAIR:
+                if to_call == 0:
+                    return min(max(min_raise, pot // 2), stack)
+                if to_call <= stack // 5:
+                    return min(to_call, stack)
+        # Continuation bet: we were last to raise before the flop and nobody bet yet.
+        if to_call == 0 and len(board) == 3 and preflop_strength(hole) >= 1:
+            return min(max(min_raise, pot // 2), stack)
         return 0
 
     def showdown(self, game_state):
