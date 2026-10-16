@@ -79,10 +79,50 @@ def heads_up_range(hole):
     return a == b or a >= 13 or (a == 12 and b >= 8)
 
 
+# Opponent model: game_id -> name -> {"hands": set of rounds seen, "raises": set of rounds raised}.
+# Lives in process memory; a restart resets it and the bot plays without reads.
+OPPONENTS = {}
+MAX_GAMES = 50
+MIN_HANDS = 8
+
+
+def observe(game_state):
+    game = OPPONENTS.setdefault(game_state.get("game_id", "?"), {})
+    while len(OPPONENTS) > MAX_GAMES:
+        OPPONENTS.pop(next(iter(OPPONENTS)))
+    if game_state.get("community_cards"):
+        return
+    rnd = game_state.get("round")
+    big_blind = 2 * game_state.get("small_blind", 1)
+    for i, p in enumerate(game_state["players"]):
+        if i == game_state["in_action"] or p.get("status") == "out":
+            continue
+        s = game.setdefault(p["name"], {"hands": set(), "raises": set()})
+        s["hands"].add(rnd)
+        if p.get("bet", 0) > big_blind:
+            s["raises"].add(rnd)
+
+
+def raiser_style(game_state):
+    """Return "loose", "tight" or None for the opponent holding the current highest bet."""
+    me = game_state["in_action"]
+    top = max((p for i, p in enumerate(game_state["players"]) if i != me),
+              key=lambda p: p.get("bet", 0), default=None)
+    s = OPPONENTS.get(game_state.get("game_id", "?"), {}).get(top["name"]) if top else None
+    if not s or len(s["hands"]) < MIN_HANDS:
+        return None
+    freq = len(s["raises"]) / len(s["hands"])
+    return "loose" if freq >= 0.35 else "tight" if freq < 0.12 else None
+
+
 class Player:
-    VERSION = "ultragood_python_playerv0.5.0"
+    VERSION = "ultragood_python_playerv0.6.0"
 
     def betRequest(self, game_state):
+        try:
+            observe(game_state)
+        except Exception:
+            traceback.print_exc(file=sys.stderr)
         try:
             return self.decide(game_state)
         except Exception:
@@ -101,12 +141,17 @@ class Player:
         unraised = game_state["current_buy_in"] <= big_blind
 
         alive = [p for p in game_state["players"] if p.get("status") != "out"]
+        try:
+            style = raiser_style(game_state) if not unraised else None
+        except Exception:
+            style = None
 
         if not board and stack <= 15 * big_blind:
             # Push or fold when short: big blinds are worth too much to bet-then-fold.
             if unraised:
                 return stack if shove_range(hole) else 0
-            return stack if call_shove_range(hole) else 0
+            wide = style == "loose" and shove_range(hole)
+            return stack if call_shove_range(hole) or wide else 0
 
         if not board:
             strength = preflop_strength(hole)
@@ -119,6 +164,10 @@ class Player:
                 return min(max(min_raise, 3 * game_state["current_buy_in"]), stack)
             # Facing a re-raise: only monsters continue for big amounts; never re-raise again.
             if is_monster(hole):
+                return min(to_call, stack)
+            if style == "tight" and to_call > 4 * big_blind:
+                return 0
+            if style == "loose" and strength >= 1 and to_call <= stack // 4:
                 return min(to_call, stack)
             limit = stack // 5 if strength == 2 else stack // 10
             if strength >= 1 and to_call <= limit:

@@ -73,6 +73,21 @@ class BetRequestTest(unittest.TestCase):
         gs = state(["Qh", "As"], board=["8s", "Ah", "8h"], current_buy_in=400, my_bet=100, stack=600, pot=600)
         self.assertEqual(Player().betRequest(gs), 0)
 
+    def test_calls_wider_against_loose_raiser(self):
+        import player
+        player.OPPONENTS.clear()
+        for rnd in range(10):  # "other" raises to 100 every hand
+            gs = state(["7h", "2d"], current_buy_in=100)
+            gs.update(game_id="g", round=rnd)
+            gs["players"][0]["bet"] = 100
+            Player().betRequest(gs)
+        gs = state(["Jh", "10d"], current_buy_in=200, my_bet=60)
+        gs.update(game_id="g", round=11)
+        gs["players"][0]["bet"] = 200
+        self.assertEqual(Player().betRequest(gs), 140)
+        gs["game_id"] = "fresh"  # no reads in a new game: fold the same spot
+        self.assertEqual(Player().betRequest(gs), 0)
+
     def test_bet_never_exceeds_stack(self):
         self.assertLessEqual(Player().betRequest(state(["Ah", "Ad"], stack=15)), 15)
 
