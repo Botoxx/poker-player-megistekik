@@ -159,6 +159,16 @@ class BetRequestTest(unittest.TestCase):
         self.assertEqual(Player().betRequest(state(["Qh", "As"], current_buy_in=160, my_bet=20, stack=700)), 140)
         self.assertEqual(Player().betRequest(state(["Qh", "As"], current_buy_in=160, my_bet=20, stack=390)), 390)
 
+    def test_monster_folds_huge_deep_reraise_but_aces_call(self):
+        # Round 13 knockout: QQ called off ~90 big blinds to a re-raise preflop and busted. Deep,
+        # these opponents re-raise this big only for value (AA/KK/QQ/AK), where QQ and A-K are behind.
+        deep = dict(current_buy_in=600, my_bet=60, stack=2000, others=3)
+        self.assertEqual(Player().betRequest(state(["Qh", "Qd"], **deep)), 0)
+        self.assertEqual(Player().betRequest(state(["Ah", "Kd"], **deep)), 0)
+        self.assertEqual(Player().betRequest(state(["Ah", "Ad"], **deep)), 540)  # AA still calls
+        # A normal-sized re-raise (to_call 240 = 12 big blinds) QQ still calls.
+        self.assertEqual(Player().betRequest(state(["Qh", "Qd"], current_buy_in=300, my_bet=60, stack=2000)), 240)
+
     def test_second_pair_folds_to_big_bet(self):
         # Round 34 knockout: K-10 on K-6-A-9 facing 420 into 700 with 790 behind.
         gs = state(["Ks", "10s"], board=["Kh", "6s", "Ad", "9s"], current_buy_in=620, my_bet=200,

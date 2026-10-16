@@ -296,7 +296,7 @@ def light_3bet_range(hole):
 
 
 class Player:
-    VERSION = "ultragood_python_playerv0.22.0"
+    VERSION = "ultragood_python_playerv0.23.0"
 
     def betRequest(self, game_state):
         try:
@@ -397,6 +397,12 @@ class Player:
                 return min(to_call, stack) if to_call <= stack // 4 else 0
             # Facing a re-raise: only monsters continue for big amounts; never re-raise again.
             if is_monster(hole):
+                ranks = sorted((rank_of(c) for c in hole), reverse=True)
+                aces_kings = ranks[0] == ranks[1] and ranks[0] >= 13
+                # Deep, these opponents re-raise this big only for value (AA/KK/QQ/AK); QQ and A-K
+                # are behind that range, so folding beats calling off ~90 big blinds with them.
+                if not aces_kings and stack > 25 * big_blind and to_call > 25 * big_blind:
+                    return 0
                 return min(to_call, stack)
             if style == "shover" and wide_call_range(hole):
                 return min(to_call, stack)
