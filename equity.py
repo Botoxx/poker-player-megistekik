@@ -75,11 +75,17 @@ def improves_board(hand, shared, board_score):
     return score[0] >= 2 or score[1] >= max(r for r, _ in shared)
 
 
-def equity(hole, board, opponents, budget_s=0.15, max_sims=800, rng=random, strong_range=False):
+def made_hand(hand, shared, board_score):
+    """True if the hole cards make a pair or better that the board alone doesn't show."""
+    return evaluate7(hand + shared)[0] > board_score[0]
+
+
+def equity(hole, board, opponents, budget_s=0.15, max_sims=800, rng=random, strong_range=False, range_level=None):
     """Share of pots we win against `opponents` hands. Returns (equity, simulations run).
 
-    With strong_range, opponents only hold top pair or better with the current board,
-    which is what a big bet usually means.
+    range_level narrows the first opponent (the bettor): 0 random, 1 a made hand (pair or better
+    with their hole cards), 2 top pair or better. Other opponents get random hands.
+    strong_range=True is the old spelling of range_level=2 for every opponent.
     """
     mine = [to_tuple(c) for c in hole]
     shared = [to_tuple(c) for c in board]
@@ -96,6 +102,11 @@ def equity(hole, board, opponents, budget_s=0.15, max_sims=800, rng=random, stro
                 improves_board(dealt[need_board + 2 * i:need_board + 2 * i + 2], shared, board_score)
                 for i in range(opponents)):
             continue  # rejected deal: does not count as a simulation
+        if range_level and len(shared) >= 3:
+            bettor = dealt[need_board:need_board + 2]
+            check = improves_board if range_level >= 2 else made_hand
+            if not check(bettor, shared, board_score):
+                continue
         full_board = shared + dealt[:need_board]
         ours = evaluate7(mine + full_board)
         best_other = max(evaluate7(dealt[need_board + 2 * i:need_board + 2 * i + 2] + full_board)

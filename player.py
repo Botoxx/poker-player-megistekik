@@ -221,7 +221,7 @@ def bettor_profile(game_state):
 
 
 class Player:
-    VERSION = "ultragood_python_playerv0.18.0"
+    VERSION = "ultragood_python_playerv0.19.0"
 
     def betRequest(self, game_state):
         try:
@@ -297,8 +297,13 @@ class Player:
                 return min(max(min_raise, 3 * big_blind), stack)
             if strength == 2 and not already_raised:
                 raise_to = max(min_raise, 3 * game_state["current_buy_in"])
-                # Raising a third of our stack and folding to a shove is the worst result: commit instead.
-                return stack if raise_to >= stack // 3 else raise_to
+                if raise_to < stack // 3:
+                    return raise_to
+                # Raising a third of our stack and folding to a shove is the worst result.
+                # Short enough: commit with a shove. Deep: just call a moderate raise.
+                if stack <= 20 * big_blind:
+                    return stack
+                return min(to_call, stack) if to_call <= stack // 4 else 0
             # Facing a re-raise: only monsters continue for big amounts; never re-raise again.
             if is_monster(hole):
                 return min(to_call, stack)
@@ -373,7 +378,16 @@ class Player:
             profile = None
         # A bet of a quarter of our stack and half the pot means a made hand, not a random one,
         # unless this bettor has shown down weak hands after betting big before.
-        win, sims = equity(hole, board, opponents, strong_range=big_bet and profile != "bluffer")
+        try:
+            if to_call > 0 and not big_bet:
+                profile = bettor_profile(game_state)
+        except Exception:
+            profile = None
+        # Any bet means the bettor usually holds a made hand; a big bet means top pair or better.
+        level = 0 if to_call == 0 else 2 if big_bet else 1
+        if profile == "bluffer":
+            level = max(level - 1, 0)
+        win, sims = equity(hole, board, opponents, range_level=level)
         if sims < 100:
             return None
         if to_call == 0:

@@ -73,7 +73,7 @@ class BetRequestTest(unittest.TestCase):
         self.assertEqual(Player().betRequest(gs), 0)
 
     def test_equity_raises_full_house(self):
-        gs = state(["8c", "8d"], board=["8s", "Ah", "Ad"], current_buy_in=200, my_bet=100, stack=900, pot=500)
+        gs = state(["Ac", "As"], board=["8s", "Ah", "8d"], current_buy_in=200, my_bet=100, stack=900, pot=500)
         self.assertGreater(Player().betRequest(gs), 100)
 
     def test_equity_calls_nut_flush_draw_at_good_price(self):
@@ -137,8 +137,10 @@ class BetRequestTest(unittest.TestCase):
         self.assertEqual(Player().betRequest(gs), 0)
 
     def test_big_reraise_commits_instead_of_raise_fold(self):
-        # A-Q facing a raise to 160 with 700 behind: 3x would be 480, so shove 700 instead.
-        self.assertEqual(Player().betRequest(state(["Qh", "As"], current_buy_in=160, my_bet=20, stack=700)), 700)
+        # A-Q facing a raise to 160: 3x would be 480, a third of the stack or more, so don't raise.
+        # 700 behind (35 big blinds) is deep: call. 300 behind (15 big blinds... here 20 bb cap): shove.
+        self.assertEqual(Player().betRequest(state(["Qh", "As"], current_buy_in=160, my_bet=20, stack=700)), 140)
+        self.assertEqual(Player().betRequest(state(["Qh", "As"], current_buy_in=160, my_bet=20, stack=390)), 390)
 
     def test_second_pair_folds_to_big_bet(self):
         # Round 34 knockout: K-10 on K-6-A-9 facing 420 into 700 with 790 behind.
@@ -184,6 +186,26 @@ class BetRequestTest(unittest.TestCase):
         player.OPPONENTS.clear()
         self.teach_showdowns("honest", ["Qd", "Qs"], 3)  # bet big three times with a set
         self.assertEqual(Player().betRequest(self.k10_spot("honest")), 0)
+
+    def test_ace_high_folds_to_river_bet_on_paired_board(self):
+        # Round 22 call-down: A-6 with no pair on J-7-4-10-7 facing 445 into a 900 pot.
+        gs = state(["As", "6s"], board=["Jc", "7c", "4h", "10h", "7d"], current_buy_in=845, my_bet=400,
+                   stack=600, pot=1245, others=1)
+        gs["players"][0]["bet"] = 845
+        self.assertEqual(Player().betRequest(gs), 0)
+
+    def test_underpair_folds_to_turn_bet(self):
+        # Round 29 call-down: 2-2 on J-4-J-7 facing 120 into a 250 pot.
+        gs = state(["2s", "2c"], board=["Jh", "4c", "Js", "7c"], current_buy_in=230, my_bet=110,
+                   stack=800, pot=370, others=1)
+        gs["players"][0]["bet"] = 230
+        self.assertEqual(Player().betRequest(gs), 0)
+
+    def test_deep_ace_queen_calls_instead_of_shoving(self):
+        # A-Q with 2,261 behind (big blind 100) facing a raise to 350: call, don't shove 22+ big blinds.
+        gs = state(["Qd", "Ac"], current_buy_in=350, my_bet=50, stack=2261)
+        gs["small_blind"] = 50
+        self.assertEqual(Player().betRequest(gs), 300)
 
     def test_bet_never_exceeds_stack(self):
         self.assertLessEqual(Player().betRequest(state(["Ah", "Ad"], stack=15)), 15)
