@@ -138,7 +138,7 @@ def raiser_style(game_state):
 
 
 class Player:
-    VERSION = "ultragood_python_playerv0.8.0"
+    VERSION = "ultragood_python_playerv0.9.0"
 
     def betRequest(self, game_state):
         try:
@@ -203,8 +203,13 @@ class Player:
         pot = game_state.get("pot", 0)
         bet_size = min(max(min_raise, pot // 2), stack)
         in_hand = sum(1 for p in game_state["players"] if p.get("status") == "active")
+        hole_ranks = [rank_of(c) for c in hole]
+        board_ranks = [rank_of(c) for c in board]
         if board_category == PAIR and category == TWO_PAIR:
-            category = PAIR  # one of the "two pairs" is on the board, everyone has it
+            # One of the "two pairs" may be on the board, where everyone has it.
+            paired = {r for r in hole_ranks if board_ranks.count(r) == 1}
+            if len(paired) < 2:
+                category, board_category = PAIR, HIGH_CARD
         # Only count hands where our hole cards add something over the board.
         if category > board_category:
             if category >= TRIPS:
@@ -214,12 +219,15 @@ class Player:
                     return bet_size
                 return min(to_call, stack) if to_call <= stack // 3 else 0
             if category == PAIR:
-                top = max(rank_of(c) for c in hole) >= max(rank_of(c) for c in board)
+                if hole_ranks[0] == hole_ranks[1]:
+                    top = hole_ranks[0] > max(board_ranks)  # overpair
+                else:
+                    top = max((r for r in hole_ranks if r in board_ranks), default=0) == max(board_ranks)
                 if top and to_call == 0 and (len(board) < 5 or bet_size <= stack // 4):
                     return bet_size
                 if to_call <= (stack // 5 if top else stack // 20):
                     return min(to_call, stack)
-                return 0
+                # Too expensive for the pair alone; a draw below may still justify a call.
         # Continuation bet: we were last to raise before the flop and nobody bet yet.
         if to_call == 0 and len(board) == 3 and preflop_strength(hole) >= 1 and in_hand <= 2:
             return bet_size

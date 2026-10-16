@@ -114,6 +114,26 @@ class BetRequestTest(unittest.TestCase):
         s = state(["Ac", "7d"], board=["2h", "9h", "Kh", "3h"], current_buy_in=10, my_bet=0, pot=100)
         self.assertEqual(Player().betRequest(s), 0)
 
+    def test_overpair_on_paired_board_calls(self):
+        s = state(["Ah", "Ad"], board=["7s", "7c", "2h"], current_buy_in=50, my_bet=0, pot=150)
+        self.assertEqual(Player().betRequest(s), 50)
+
+    def test_top_pair_on_paired_board_calls(self):
+        s = state(["Kh", "9d"], board=["Ks", "7c", "7h"], current_buy_in=50, my_bet=0, pot=150)
+        self.assertEqual(Player().betRequest(s), 50)
+
+    def test_two_real_pairs_on_paired_board_count(self):
+        s = state(["Kh", "Qd"], board=["Ks", "Qc", "7h", "7d"], current_buy_in=0, my_bet=0, pot=150)
+        self.assertGreater(Player().betRequest(s), 0)
+
+    def test_bottom_pair_with_ace_kicker_is_not_top_pair(self):
+        s = state(["Ac", "5d"], board=["Ks", "9c", "5h"], current_buy_in=150, my_bet=0, pot=300)
+        self.assertEqual(Player().betRequest(s), 0)
+
+    def test_weak_pair_with_flush_draw_calls(self):
+        s = state(["7h", "4h"], board=["Kh", "9h", "4d"], current_buy_in=60, my_bet=0, pot=300)
+        self.assertEqual(Player().betRequest(s), 60)
+
     def test_bad_state_returns_zero(self):
         self.assertEqual(Player().betRequest({}), 0)
 
