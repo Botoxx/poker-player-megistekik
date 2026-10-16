@@ -148,7 +148,7 @@ def raiser_style(game_state):
 
 
 class Player:
-    VERSION = "ultragood_python_playerv0.10.0"
+    VERSION = "ultragood_python_playerv0.11.0"
 
     def betRequest(self, game_state):
         try:
@@ -184,7 +184,8 @@ class Player:
                 # Opponents call wide against frequent shovers; only shove wide when desperate.
                 in_range = shove_range(hole) if stack <= 10 * big_blind else tight_shove_range(hole)
                 return stack if in_range else 0
-            wide = (style == "loose" and shove_range(hole)) or (style == "shover" and wide_call_range(hole))
+            # Raising often is not shoving wide: against either, call only with hands ahead of a wide range.
+            wide = style in ("loose", "shover") and wide_call_range(hole)
             return stack if call_shove_range(hole) or wide else 0
 
         if not board:
@@ -237,7 +238,7 @@ class Player:
                     top = max((r for r in hole_ranks if r in board_ranks), default=0) == max(board_ranks)
                 if top and to_call == 0 and (len(board) < 5 or bet_size <= stack // 4):
                     return bet_size
-                if to_call <= (stack // 5 if top else stack // 20):
+                if to_call <= (stack // 5 if top else stack // 20) or (top and to_call * 3 <= pot):
                     return min(to_call, stack)
                 # Too expensive for the pair alone; a draw below may still justify a call.
         # Continuation bet: we were last to raise before the flop and nobody bet yet.

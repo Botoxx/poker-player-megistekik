@@ -104,6 +104,11 @@ class BetRequestTest(unittest.TestCase):
         gs["players"][0].update(bet=1000, stack=0)
         self.assertEqual(Player().betRequest(gs), 940)
 
+    def test_overpair_calls_with_good_pot_odds(self):
+        # KK on Q-6-4 facing 300 into a 1200 pot: 4:1, call even though it is over a fifth of our stack.
+        s = state(["Kh", "Kd"], board=["4d", "Qh", "6d"], current_buy_in=300, my_bet=0, stack=1000, pot=1200)
+        self.assertEqual(Player().betRequest(s), 300)
+
     def test_bet_never_exceeds_stack(self):
         self.assertLessEqual(Player().betRequest(state(["Ah", "Ad"], stack=15)), 15)
 
