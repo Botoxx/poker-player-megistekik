@@ -68,6 +68,11 @@ class BetRequestTest(unittest.TestCase):
     def test_short_stack_folds_trash(self):
         self.assertEqual(Player().betRequest(state(["9h", "3d"], stack=200)), 0)
 
+    def test_board_pair_plus_our_pair_is_not_two_pair(self):
+        # A-Q on A-8-8 facing a big bet: one pair of aces, not two pair, so no big call.
+        gs = state(["Qh", "As"], board=["8s", "Ah", "8h"], current_buy_in=400, my_bet=100, stack=600, pot=600)
+        self.assertEqual(Player().betRequest(gs), 0)
+
     def test_bet_never_exceeds_stack(self):
         self.assertLessEqual(Player().betRequest(state(["Ah", "Ad"], stack=15)), 15)
 

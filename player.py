@@ -80,7 +80,7 @@ def heads_up_range(hole):
 
 
 class Player:
-    VERSION = "ultragood_python_playerv0.4.0"
+    VERSION = "ultragood_python_playerv0.5.0"
 
     def betRequest(self, game_state):
         try:
@@ -129,6 +129,9 @@ class Player:
         board_category = hand_category(board) if len(board) >= 2 else HIGH_CARD
         pot = game_state.get("pot", 0)
         bet_size = min(max(min_raise, pot // 2), stack)
+        in_hand = sum(1 for p in game_state["players"] if p.get("status") == "active")
+        if board_category == PAIR and category == TWO_PAIR:
+            category = PAIR  # one of the "two pairs" is on the board, everyone has it
         # Only count hands where our hole cards add something over the board.
         if category > board_category:
             if category >= TRIPS:
@@ -139,13 +142,14 @@ class Player:
                 return min(to_call, stack) if to_call <= stack // 3 else 0
             if category == PAIR:
                 top = max(rank_of(c) for c in hole) >= max(rank_of(c) for c in board)
-                if top and to_call == 0:
+                if top and to_call == 0 and len(board) < 5 and bet_size <= stack // 4:
                     return bet_size
                 if to_call <= (stack // 5 if top else stack // 20):
                     return min(to_call, stack)
                 return 0
         # Continuation bet: we were last to raise before the flop and nobody bet yet.
-        if to_call == 0 and len(board) == 3 and preflop_strength(hole) >= 1:
+        if (to_call == 0 and len(board) == 3 and preflop_strength(hole) >= 1
+                and in_hand <= 2 and bet_size <= stack // 8):
             return bet_size
         return 0
 
